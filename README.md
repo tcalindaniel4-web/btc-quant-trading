@@ -13,6 +13,10 @@ licenta crypto ai/
 ├── venv/                         ← mediul virtual Python
 │
 ├── backend/
+│   ├── api/                      ← serverul platformei web J.A.R.V.I.S. (FastAPI)
+│   │   ├── server.py                 API: piață, boți, backtest, actualizare date, chat (etapa finală)
+│   │   └── control_boti.py           pornește / oprește boții live ca procese separate
+│   ├── logs/                     ← log-urile boților porniți din platformă (nu intră în git)
 │   ├── data/                     ← date generate automat de pipeline (nu se editează manual)
 │   │   ├── btc_live_data.csv         preț + VWAP, MACD, RSI
 │   │   ├── binance_derivatives.csv   Open Interest + Funding Rate
@@ -48,9 +52,27 @@ licenta crypto ai/
 │           ├── data/                 date proprii (btc_1d.csv, funding_1d.csv)
 │           └── rezultate/            tranzacții backtest, echitate, jurnal live
 │
-├── frontend/                     ← rezervat pentru interfața aplicației
+├── frontend/                     ← interfața web J.A.R.V.I.S. (index.html, style.css, app.js)
 └── arhiva/                       ← scripturi și date vechi, păstrate pentru istoric (nu se mai folosesc)
 ```
+
+## 🖥️ Platforma J.A.R.V.I.S.
+
+```
+venv\Scripts\python.exe backend\api\server.py
+```
+apoi deschide **http://127.0.0.1:8000** în browser. Trei secțiuni:
+
+- **COMANDĂ** – preț live, Master_Index și componentele lui, starea celor doi boți, istoricul pieței și
+  comparația SDCA v2 / AI Hedge Fund / Buy & Hold pe aceeași perioadă. Consola asistentului e pregătită
+  (se activează în etapa finală, cu cheia API Anthropic).
+- **BOȚI LIVE** – pornește / oprește boții, rulează un ciclu la cerere, resetează portofoliul (arhivare),
+  vezi log-ul live, portofoliul, semnalul curent și ultimele tranzacții. Boții rulează ca procese separate
+  și continuă și după ce închizi pagina.
+- **BACKTEST** – alegi strategia, data de start și capitalul; primești raportul complet, graficul,
+  randamentul pe ani și jurnalul cu motivul fiecărei tranzacții.
+
+Butonul **⟳ ACTUALIZEAZĂ DATE** descarcă date noi (pipeline Master_Index + istoric AI).
 
 ## 🧠 Cele două strategii
 

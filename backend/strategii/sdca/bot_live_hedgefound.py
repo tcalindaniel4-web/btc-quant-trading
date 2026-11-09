@@ -25,6 +25,8 @@ NUME_SCRIPT_DATE = PIPELINE_DIR / 'actualizeaza_date.py'
 #   python backend/strategii/sdca/bot_live_hedgefound.py                      -> LIVE: date noi + decizie, la 3 ore
 #   python backend/strategii/sdca/bot_live_hedgefound.py --offline            -> o analiză pe datele locale
 #   python backend/strategii/sdca/bot_live_hedgefound.py --replay 2025-01-01  -> rejoacă istoricul zi cu zi
+#   python backend/strategii/sdca/bot_live_hedgefound.py --o-data             -> un singur ciclu live
+#        portofoliu nou: --capital 10000 (fără consolă interactivă se folosește 10000 implicit)
 #        opțional: --capital 10000  --pauza 0.3  (secunde între zile)
 
 
@@ -81,7 +83,7 @@ def afiseaza_portofoliu(state, pret):
     print(f"💰 Valoare Totală: ${valoare:,.2f} | 📈 P/L: {((valoare/state['capital_initial'])-1)*100:.2f}%")
     print("="*80)
 
-def rulare_ciclu_analiza(offline=False):
+def rulare_ciclu_analiza(offline=False, capital=None):
     mod = "OFFLINE (date locale)" if offline else "LIVE EXECUTION"
     print("\n" + "="*80)
     print(f" 🚀 HEDGE FUND AI - {mod} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) 🚀")
@@ -98,7 +100,11 @@ def rulare_ciclu_analiza(offline=False):
     state = incarca_memoria()
     if state is None:
         print("\n[i] Inițializare Portofoliu Nou.")
-        state = stare_noua(cere_capital())
+        if capital is None:
+            # pornit din consolă -> întrebăm; pornit din platformă (fără consolă) -> 10.000 implicit
+            capital = cere_capital() if sys.stdin and sys.stdin.isatty() else 10000.0
+        print(f"[i] Capital inițial: ${capital:,.2f}")
+        state = stare_noua(capital)
         salveaza_memoria(state)
 
     # 3. Procesare Date
@@ -160,15 +166,17 @@ def replay_mode(start, capital, pauza):
 
     afiseaza_portofoliu(state, azi['Close'])
 
-def daemon_mode():
-    ore_interval = 3
+def daemon_mode(capital=None, ore_interval=3.0):
     secunde_interval = ore_interval * 3600
 
-    print(f"\n[🔄] Modul AUTONOM activat. Botul se va actualiza din {ore_interval} în {ore_interval} ore.")
+    print(f"\n[🔄] Modul AUTONOM activat. Botul se va actualiza din {ore_interval:g} în {ore_interval:g} ore.")
     print("[!] Apăsați CTRL+C pentru a opri execuția.\n")
 
     while True:
-        rulare_ciclu_analiza()
+        try:
+            rulare_ciclu_analiza(capital=capital)
+        except Exception as e:  # un ciclu ratat nu trebuie să oprească botul
+            print(f"❌ Eroare în ciclu: {e}")
 
         timp_urmator = datetime.fromtimestamp(time.time() + secunde_interval).strftime('%H:%M:%S')
         print(f"\n[💤] Botul intră în repaus. Următoarea rulare automată va fi la ora: {timp_urmator}")
@@ -180,13 +188,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hedge Fund AI - bot BTC")
     parser.add_argument('--offline', action='store_true', help='o singură analiză pe datele locale, fără descărcare')
     parser.add_argument('--replay', metavar='YYYY-MM-DD', help='rejoacă istoricul începând cu această dată')
-    parser.add_argument('--capital', type=float, default=10000.0, help='capital pentru replay (implicit 10000)')
+    parser.add_argument('--capital', type=float, default=None,
+                        help='capital pentru un portofoliu NOU sau pentru replay (implicit 10000)')
     parser.add_argument('--pauza', type=float, default=0.0, help='secunde între zile în replay (ex. 0.3 pentru demo)')
+    parser.add_argument('--o-data', action='store_true', help='un singur ciclu live (date noi + decizie), apoi ieșire')
+    parser.add_argument('--ore', type=float, default=3.0, help='ore între cicluri în modul autonom (implicit 3)')
     args = parser.parse_args()
 
     if args.replay:
-        replay_mode(args.replay, args.capital, args.pauza)
+        replay_mode(args.replay, args.capital or 10000.0, args.pauza)
     elif args.offline:
-        rulare_ciclu_analiza(offline=True)
+        rulare_ciclu_analiza(offline=True, capital=args.capital)
+    elif args.o_data:
+        rulare_ciclu_analiza(capital=args.capital)
     else:
-        daemon_mode()
+        daemon_mode(capital=args.capital, ore_interval=args.ore)

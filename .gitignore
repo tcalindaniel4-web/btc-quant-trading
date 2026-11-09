@@ -14,6 +14,9 @@ backend/strategii/ai_hedgefund/data/
 # --- Rezultate backtest (se regenerează la fiecare rulare) ---
 backend/strategii/*/rezultate/
 
+# --- Log-urile boților porniți din platformă ---
+backend/logs/
+
 # --- Starea portofoliilor virtuale (se schimbă la fiecare ciclu al boților) ---
 backend/strategii/sdca/bot_state*.json
 backend/strategii/ai_hedgefund/stare_live*.json

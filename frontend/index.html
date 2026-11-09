@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>J.A.R.V.I.S. Quant Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;800&family=Rajdhani:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div id="boot" title="Click pentru a sări peste"><pre id="boot-text"></pre></div>
+  <div class="scanlines"></div>
+
+  <header class="topbar">
+    <div class="logo"><b>J.A.R.V.I.S.</b><span>BTC QUANT TERMINAL</span></div>
+    <nav class="tabs" aria-label="Secțiuni">
+      <button data-pagina="comanda" class="activ">COMANDĂ</button>
+      <button data-pagina="boti">BOȚI LIVE</button>
+      <button data-pagina="backtest">BACKTEST</button>
+    </nav>
+    <div class="dreapta">
+      <div class="surse">
+        <span title="Prețul live de pe Binance"><i class="led" id="led-binance"></i>BINANCE</span>
+        <span title="Master_Index (pipeline zilnic)"><i class="led" id="led-master"></i>PIPELINE</span>
+        <span title="Date on-chain BGeometrics (întârziere normală 7 zile)"><i class="led" id="led-onchain"></i>ON-CHAIN</span>
+      </div>
+      <button class="btn" id="btn-actualizeaza" title="Descarcă date noi: Binance, BGeometrics, istoric AI">⟳ ACTUALIZEAZĂ DATE</button>
+      <div class="ceas"><span id="ceas-local">--:--:--</span><small id="ceas-utc">UTC --:--</small></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================================================================ COMANDĂ -->
+    <section class="pagina activa" id="p-comanda">
+      <div class="grid-comanda">
+
+        <div class="panel a-piata">
+          <h2>PIAȚĂ // BTC-USDT</h2>
+          <div><span class="pret-mare" id="pret">—</span><span class="variatie" id="variatie"></span></div>
+          <dl class="kv">
+            <dt>Maxim 24h</dt><dd id="max24">—</dd>
+            <dt>Minim 24h</dt><dd id="min24">—</dd>
+            <dt>Volum 24h</dt><dd id="vol24">—</dd>
+            <dt>RSI 14</dt><dd id="rsi">—</dd>
+          </dl>
+          <h3>MASTER_INDEX // ZONE</h3>
+          <div class="gauge" aria-label="Poziția Master_Index între -2 și +2">
+            <div class="gauge-bara"><span class="z acc" style="width:37.5%"></span><span class="z neu" style="width:32.5%"></span><span class="z euf" style="width:30%"></span></div>
+            <div class="gauge-ac"><i id="ac-index" style="left:50%"></i></div>
+            <div class="gauge-etichete"><span>-2 ACUMULARE</span><span>-0.5</span><span>0.8</span><span>EUFORIE +2</span></div>
+          </div>
+          <h3>COMPONENTE (CONTRIBUȚIE LA INDEX)</h3>
+          <div class="componente" id="componente"></div>
+          <p class="nota" id="nota-onchain"></p>
+        </div>
+
+        <div class="a-nucleu nucleu">
+          <div class="reactor" id="reactor">
+            <svg viewBox="0 0 200 200" aria-hidden="true">
+              <defs>
+                <radialGradient id="g-miez" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#7ff3ff" stop-opacity=".9"/>
+                  <stop offset="45%" stop-color="#00c8ff" stop-opacity=".35"/>
+                  <stop offset="100%" stop-color="#00c8ff" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+              <circle class="puls" cx="100" cy="100" r="62" fill="url(#g-miez)"/>
+              <g class="rot-lent"><circle cx="100" cy="100" r="96" fill="none" stroke="#00e1ff" stroke-opacity=".35" stroke-width="1" stroke-dasharray="2 5"/></g>
+              <g class="rot-invers"><circle cx="100" cy="100" r="88" fill="none" stroke="#00e1ff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="46 14"/></g>
+              <g class="rot-rapid"><circle cx="100" cy="100" r="79" fill="none" stroke="#00e1ff" stroke-opacity=".4" stroke-width="5" stroke-dasharray="1 6"/></g>
+              <circle cx="100" cy="100" r="71" fill="none" stroke="#00e1ff" stroke-opacity=".12" stroke-width="4"/>
+              <circle id="arc-index" cx="100" cy="100" r="71" fill="none" stroke="#00e1ff" stroke-width="4" stroke-linecap="round"
+                      stroke-dasharray="446" stroke-dashoffset="446" transform="rotate(-90 100 100)" style="transition: stroke-dashoffset 1s ease"/>
+              <circle cx="100" cy="100" r="60" fill="#03080e" stroke="#00e1ff" stroke-opacity=".5" stroke-width="1"/>
+            </svg>
+            <div class="reactor-centru">
+              <span class="eticheta">MASTER_INDEX</span>
+              <span class="valoare" id="reactor-valoare">—</span>
+              <span class="semnal HOLD" id="reactor-semnal">—</span>
+            </div>
+          </div>
+
+          <div class="consola">
+            <div class="consola-cap"><span>J.A.R.V.I.S. // ASISTENT TRADING</span><span><i class="led warn"></i>OFFLINE</span></div>
+            <div class="mesaje" id="mesaje" aria-live="polite">
+              <div class="msg jarvis">Sisteme online. Monitorizez piața și cei doi boți. Modulul de conversație va fi activat în etapa finală — până atunci, toate datele sunt disponibile în panouri.</div>
+            </div>
+            <form id="form-chat">
+              <input id="intrebare" placeholder="Întreabă-l pe J.A.R.V.I.S. (se activează în etapa finală)…" autocomplete="off">
+              <button class="btn btn-mic" type="button" disabled title="Comenzi vocale - în etapa finală">🎙</button>
+              <button class="btn primar" type="submit">TRIMITE</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel a-boti">
+          <h2>BOȚI // STATUS</h2>
+          <div id="carduri-boti"><div class="incarcare">Se încarcă</div></div>
+          <p style="margin:14px 0 0"><button class="btn" data-mergi="boti">CONTROL BOȚI LIVE →</button></p>
+        </div>
+
+        <div class="panel a-grafice">
+          <h2>PIAȚĂ // ISTORIC</h2>
+          <div class="antet-grafic">
+            <span class="titlu-grafic">Preț BTC (închidere zilnică, USD)</span>
+            <div class="segment" id="seg-istoric"><button data-zile="90">90Z</button><button data-zile="365" class="activ">1 AN</button><button data-zile="2000">TOT</button></div>
+          </div>
+          <div class="grafic"><canvas id="g-pret" aria-label="Grafic preț BTC"></canvas></div>
+          <div class="antet-grafic" style="margin-top:14px"><span class="titlu-grafic">Master_Index (zonă verde = acumulare sub -0.5, roșie = euforie peste 0.8)</span></div>
+          <div class="grafic mic"><canvas id="g-master" aria-label="Grafic Master_Index"></canvas></div>
+        </div>
+
+        <div class="panel a-comparatie">
+          <h2>COMPARAȚIE STRATEGII // $10.000 INVESTIȚI</h2>
+          <div class="antet-grafic">
+            <span class="titlu-grafic" id="comparatie-perioada">—</span>
+            <div class="legenda">
+              <span><i style="background:var(--s-sdca)"></i>SDCA v2</span>
+              <span><i style="background:var(--s-ai)"></i>AI Hedge Fund</span>
+              <span><i style="background:var(--s-bh)"></i>Buy &amp; Hold</span>
+            </div>
+          </div>
+          <div class="grafic mare"><canvas id="g-comparatie" aria-label="Curbele de capital ale strategiilor"></canvas></div>
+          <div class="tabel-wrap" style="margin-top:14px">
+            <table id="tabel-comparatie" aria-label="Statistici strategii"></table>
+          </div>
+          <p class="nota">▲ pe curba SDCA marchează tranzacțiile mari (front-load, vânzarea de 70%, moonbag). Backtest cu comisioane și slippage, date on-chain întârziate 7 zile ca live. Rezultatele trecute nu garantează rezultate viitoare.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ BOȚI LIVE -->
+    <section class="pagina" id="p-boti">
+      <div class="doua-col" id="panouri-boti"></div>
+      <p class="nota">Boții rulează ca procese separate: continuă și dacă închizi pagina. Toate tranzacțiile sunt SIMULATE (paper trading) — niciun ordin real nu este trimis.</p>
+    </section>
+
+    <!-- ================================================================ BACKTEST -->
+    <section class="pagina" id="p-backtest">
+      <div class="panel">
+        <h2>BACKTEST // LABORATOR</h2>
+        <form class="rand-controale" id="form-backtest">
+          <label class="camp">STRATEGIE
+            <select id="bt-strategie">
+              <option value="sdca">SDCA v2 (Master_Index)</option>
+              <option value="ai">AI Hedge Fund (trend & momentum)</option>
+            </select>
+          </label>
+          <label class="camp">DATA DE START<input type="date" id="bt-start" value="2023-02-15"></label>
+          <label class="camp">CAPITAL ($)<input type="number" id="bt-capital" value="10000" min="10" step="any" required></label>
+          <button class="btn primar" type="submit" id="bt-ruleaza">▶ RULEAZĂ BACKTEST</button>
+        </form>
+        <p class="nota" id="bt-nota">SDCA v2 are date on-chain complete din 2023-02-15; AI Hedge Fund poate porni din 2018-08-17.</p>
+      </div>
+      <div id="bt-rezultate"></div>
+    </section>
+  </main>
+
+  <div class="modal hidden" id="modal">
+    <div class="panel">
+      <h2 id="modal-titlu">CONFIRMARE</h2>
+      <p id="modal-text"></p>
+      <div class="rand-controale" style="justify-content:flex-end">
+        <button class="btn" id="modal-nu">ANULEAZĂ</button>
+        <button class="btn pericol" id="modal-da">CONFIRMĂ</button>
+      </div>
+    </div>
+  </div>
+  <div id="toast" aria-live="polite"></div>
+</body>
+</html>

@@ -1,0 +1,623 @@
+/* =====================================================================
+   J.A.R.V.I.S. // BTC QUANT TERMINAL - logica interfeței
+   Toate datele vin din serverul local (backend/api/server.py).
+   ===================================================================== */
+'use strict';
+
+const CUL = { sdca: '#0aa5c2', ai: '#c47d14', bh: '#8f78e8', pret: '#38bdd8', text: '#d9f6ff', text2: '#92b8c7',
+              muted: '#5f7f8d', grila: 'rgba(0,225,255,0.07)', good: '#34d17e', bad: '#ff5a6e' };
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const stare = { pagina: 'comanda', grafice: {}, zileIstoric: 365, boti: {}, date: {}, bt: null, filtruBt: 'toate' };
+
+// ----------------------------------------------------------------- formatare
+const nr = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const usd = (v, d = 0) => v == null || isNaN(v) ? '—' : (v < 0 ? '-$' : '$') + nr(Math.abs(v), d);
+const pct = (v, d = 1, semn = true) => v == null || isNaN(v) ? '—' : (semn && v > 0 ? '+' : '') + Number(v).toFixed(d) + '%';
+const semnCls = v => v > 0 ? 'poz' : v < 0 ? 'neg' : '';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const compact = v => Math.abs(v) >= 1e9 ? '$' + (v / 1e9).toFixed(2) + 'B' : Math.abs(v) >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : usd(v);
+
+// ----------------------------------------------------------------- comunicare cu serverul
+async function api(cale, optiuni = {}) {
+  const r = await fetch(cale, { headers: { 'Content-Type': 'application/json' }, ...optiuni });
+  let corp = null;
+  try { corp = await r.json(); } catch (_) { /* fără corp JSON */ }
+  if (!r.ok) {
+    const err = new Error((corp && corp.detail) || `Eroare server (${r.status})`);
+    err.status = r.status;
+    throw err;
+  }
+  return corp;
+}
+const post = (cale, corp = {}) => api(cale, { method: 'POST', body: JSON.stringify(corp) });
+
+function toast(text, eroare = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (eroare ? ' eroare' : '');
+  el.textContent = text;
+  $('#toast').appendChild(el);
+  setTimeout(() => el.remove(), eroare ? 7000 : 4200);
+}
+
+function confirma(titlu, text) {
+  return new Promise(rez => {
+    $('#modal-titlu').textContent = titlu;
+    $('#modal-text').textContent = text;
+    $('#modal').classList.remove('hidden');
+    const gata = v => { $('#modal').classList.add('hidden'); $('#modal-da').onclick = $('#modal-nu').onclick = null; rez(v); };
+    $('#modal-da').onclick = () => gata(true);
+    $('#modal-nu').onclick = () => gata(false);
+  });
+}
+
+const mem = {
+  get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* stocare indisponibilă */ } },
+};
+
+// ----------------------------------------------------------------- boot
+function boot() {
+  const el = $('#boot'), txt = $('#boot-text');
+  if (mem.get('jarvis-boot') === 'vazut' || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('gata'); return; }
+  const linii = ['> J.A.R.V.I.S. // BTC QUANT TERMINAL v1.0', '> inițializare nucleu ............ OK',
+    '> conectare Binance Spot / Futures  OK', '> pipeline Master_Index ........... OK',
+    '> date on-chain BGeometrics ....... OK', '> strategii: SDCA v2 · AI Hedge Fund', '> toate sistemele online.'];
+  let i = 0;
+  const pas = () => {
+    if (i < linii.length) { txt.textContent += linii[i++] + '\n'; setTimeout(pas, 170); }
+    else setTimeout(() => el.classList.add('gata'), 380);
+  };
+  el.onclick = () => el.classList.add('gata');
+  pas();
+  mem.set('jarvis-boot', 'vazut');
+}
+
+// ----------------------------------------------------------------- navigare
+function arataPagina(p) {
+  stare.pagina = p;
+  $$('nav.tabs button').forEach(b => b.classList.toggle('activ', b.dataset.pagina === p));
+  $$('.pagina').forEach(s => s.classList.toggle('activa', s.id === 'p-' + p));
+  mem.set('jarvis-pagina', p);
+  if (p === 'boti') { incarcaBoti(); incarcaLoguri(); }
+  window.scrollTo({ top: 0 });
+}
+
+function ceas() {
+  const a = new Date();
+  $('#ceas-local').textContent = a.toLocaleTimeString('ro-RO');
+  $('#ceas-utc').textContent = 'UTC ' + a.toISOString().slice(11, 16) + ' · ' + a.toLocaleDateString('ro-RO');
+}
+
+// ----------------------------------------------------------------- grafice (Chart.js)
+const pluginCrosshair = {
+  id: 'crosshair',
+  afterDatasetsDraw(chart) {
+    const t = chart.tooltip;
+    if (!t || !t.getActiveElements().length) return;
+    const x = t.getActiveElements()[0].element.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+    ctx.save(); ctx.strokeStyle = 'rgba(0,225,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
+  },
+};
+const pluginEticheteFinal = {   // etichete directe la capătul fiecărei serii (text în culoarea textului, nu a seriei)
+  id: 'eticheteFinal',
+  afterDatasetsDraw(chart, _a, opt) {
+    if (!opt || !opt.activ) return;
+    const ctx = chart.ctx, pozitii = [];
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden || !meta.data.length) return;
+      const p = meta.data[meta.data.length - 1];
+      pozitii.push({ y: p.y, x: p.x, text: `${ds.label} ${opt.format(ds.data[ds.data.length - 1])}`, cul: ds.borderColor });
+    });
+    pozitii.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < pozitii.length; i++) if (pozitii[i].y - pozitii[i - 1].y < 14) pozitii[i].y = pozitii[i - 1].y + 14;
+    ctx.save(); ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle';
+    pozitii.forEach(p => {
+      ctx.fillStyle = p.cul; ctx.fillRect(p.x + 6, p.y - 1, 8, 2);
+      ctx.fillStyle = CUL.text; ctx.fillText(p.text, p.x + 18, p.y);
+    });
+    ctx.restore();
+  },
+};
+const pluginZone = {
+  id: 'zone',
+  beforeDatasetsDraw(chart, _a, opt) {
+    if (!opt || opt.buy == null) return;
+    const { ctx, chartArea: a, scales: { y } } = chart;
+    const yBuy = Math.min(Math.max(y.getPixelForValue(opt.buy), a.top), a.bottom);
+    const ySell = Math.min(Math.max(y.getPixelForValue(opt.sell), a.top), a.bottom);
+    ctx.save();
+    ctx.fillStyle = 'rgba(52,209,126,0.10)'; ctx.fillRect(a.left, yBuy, a.right - a.left, a.bottom - yBuy);
+    ctx.fillStyle = 'rgba(255,90,110,0.10)'; ctx.fillRect(a.left, a.top, a.right - a.left, ySell - a.top);
+    ctx.strokeStyle = 'rgba(146,184,199,0.35)'; ctx.setLineDash([4, 4]);
+    [yBuy, ySell].forEach(v => { ctx.beginPath(); ctx.moveTo(a.left, v); ctx.lineTo(a.right, v); ctx.stroke(); });
+    ctx.setLineDash([]); ctx.font = '10px "JetBrains Mono", monospace'; ctx.fillStyle = CUL.muted;
+    ctx.fillText('EUFORIE > 0.8', a.left + 6, ySell - 5);
+    ctx.fillText('ACUMULARE < -0.5', a.left + 6, yBuy + 12);
+    ctx.restore();
+  },
+};
+
+function configGrafic(formatY, extra = {}) {
+  if (window.innerWidth < 760 && extra.etichete) {   // ecran îngust: legenda de sus ajunge, păstrăm spațiul pentru curbe
+    extra = { ...extra, etichete: { activ: false }, paddingDreapta: 8 };
+  }
+  return {
+    type: 'line',
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { right: extra.paddingDreapta || 8 } },
+      scales: {
+        x: { grid: { color: CUL.grila, drawTicks: false }, border: { color: 'rgba(0,225,255,0.15)' },
+             ticks: { color: CUL.muted, maxTicksLimit: 7, maxRotation: 0, autoSkip: true, padding: 6, font: { family: 'JetBrains Mono', size: 10.5 } } },
+        y: { grid: { color: CUL.grila, drawTicks: false }, border: { display: false },
+             ticks: { color: CUL.muted, padding: 8, maxTicksLimit: 6, font: { family: 'JetBrains Mono', size: 10.5 }, callback: formatY },
+             ...(extra.y || {}) },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(3,10,16,0.95)', borderColor: 'rgba(0,225,255,0.4)', borderWidth: 1, padding: 10,
+          titleColor: CUL.text, bodyColor: CUL.text2, titleFont: { family: 'JetBrains Mono', size: 11.5 },
+          bodyFont: { family: 'JetBrains Mono', size: 11.5 }, boxWidth: 10, boxHeight: 3, usePointStyle: false,
+          callbacks: extra.tooltip || {},
+        },
+        eticheteFinal: extra.etichete || { activ: false },
+        zone: extra.zone || {},
+      },
+      elements: { point: { radius: 0, hoverRadius: 4, hitRadius: 8 }, line: { borderWidth: 2, tension: 0 } },
+    },
+    plugins: [pluginCrosshair, pluginEticheteFinal, pluginZone],
+  };
+}
+
+function deseneaza(id, cfgFn, date) {
+  if (typeof Chart === 'undefined') return;   // librăria nu s-a încărcat (fără internet)
+  const vechi = stare.grafice[id];
+  if (vechi) vechi.destroy();
+  const cfg = cfgFn();
+  cfg.data = date;
+  stare.grafice[id] = new Chart(document.getElementById(id), cfg);
+}
+
+const serie = (label, data, cul, extra = {}) => ({ label, data, borderColor: cul, backgroundColor: cul, pointBackgroundColor: cul,
+  pointBorderColor: '#08131d', pointBorderWidth: 2, ...extra });
+
+// ----------------------------------------------------------------- PIAȚĂ
+async function incarcaPiata() {
+  try {
+    const d = await api('/api/piata');
+    stare.date.piata = d;
+    $('#pret').textContent = usd(d.pret, 2);
+    const v = d.live && d.live.ok ? d.live.variatie_24h : null;
+    const elv = $('#variatie');
+    elv.textContent = v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + pct(v, 2);
+    elv.className = 'variatie ' + (v >= 0 ? 'sus' : 'jos');
+    $('#max24').textContent = d.live.ok ? usd(d.live.max_24h, 0) : '—';
+    $('#min24').textContent = d.live.ok ? usd(d.live.min_24h, 0) : '—';
+    $('#vol24').textContent = d.live.ok ? compact(d.live.volum_24h_usd) : '—';
+    $('#rsi').textContent = nr(d.master.rsi, 1);
+
+    $('#led-binance').className = 'led ' + (d.live.ok ? 'ok' : 'bad');
+    $('#led-master').className = 'led ' + (d.prospetime.la_zi ? 'ok' : 'warn');
+    const zileOnchain = d.prospetime.onchain_zi ? Math.round((new Date(d.prospetime.azi_utc) - new Date(d.prospetime.onchain_zi)) / 864e5) : 99;
+    $('#led-onchain').className = 'led ' + (zileOnchain <= 9 ? 'ok' : 'warn');
+
+    const m = d.master, mi = Math.max(-2, Math.min(2, m.valoare));
+    $('#ac-index').style.left = ((mi + 2) / 4 * 100) + '%';
+    $('#reactor-valoare').textContent = (m.valoare >= 0 ? '+' : '') + m.valoare.toFixed(2);
+    const sem = $('#reactor-semnal'); sem.textContent = m.semnal; sem.className = 'semnal ' + m.semnal;
+    $('#arc-index').style.strokeDashoffset = 446 * (1 - (mi + 2) / 4);
+
+    $('#componente').innerHTML = m.componente.map(c => {
+      const w = Math.min(50, Math.abs(c.contributie) / 0.4 * 50);
+      const stanga = c.contributie >= 0 ? 50 : 50 - w;
+      return `<div class="comp" title="${esc(c.nume)}: valoare ${nr(c.valoare, 2)} × pondere ${c.pondere}">
+        <span class="nume">${esc(c.nume)}</span>
+        <span class="bara"><i class="${c.contributie < 0 ? 'neg' : ''}" style="left:${stanga}%;width:${w}%"></i></span>
+        <span class="val">${(c.contributie >= 0 ? '+' : '') + c.contributie.toFixed(2)}</span></div>`;
+    }).join('');
+    $('#nota-onchain').textContent = `Master_Index din ${m.data}. Date on-chain (MVRV, SOPR) din ${m.data_onchain || '—'}: ` +
+      `BGeometrics gratuit le publică cu ~7 zile întârziere, exact cum le folosește și backtest-ul.`;
+  } catch (e) {
+    $('#led-binance').className = 'led bad';
+    toast('Nu pot citi datele de piață: ' + e.message, true);
+  }
+}
+
+// ----------------------------------------------------------------- carduri boți (pagina COMANDĂ)
+async function incarcaCarduriBoti() {
+  try {
+    const [s, a, b] = await Promise.all([api('/api/sdca'), api('/api/ai'), api('/api/boti')]);
+    stare.date.sdca = s; stare.date.ai = a; stare.boti = b;
+    const ledBot = k => b[k].ruleaza ? '<i class="led ok"></i>RULEAZĂ' : b[k].ciclu_in_curs ? '<i class="led warn"></i>CICLU' : '<i class="led"></i>OPRIT';
+    const decS = s.previzualizare.mesaje.length ? s.previzualizare.mesaje.map(esc).join('<br>') : 'STANDBY — nicio condiție de execuție îndeplinită';
+    const pS = s.portofoliu;
+    const pA = a.portofoliu;
+    const da = a.voturi.filter(v => v.da).length;
+    $('#carduri-boti').innerHTML = `
+      <div class="card-bot">
+        <div class="cap"><span class="titlu"><i style="background:var(--s-sdca)"></i>SDCA v2</span><span class="stare-bot">${ledBot('sdca')}</span></div>
+        ${pS ? `<div class="valoare-bot">${usd(pS.valoare, 0)} <span class="variatie ${pS.pl_procent >= 0 ? 'sus' : 'jos'}">${pct(pS.pl_procent, 2)}</span></div>
+                <div class="t2" style="font-size:12.5px">cash ${usd(pS.cash)} · ${nr(pS.btc, 4)} BTC</div>`
+             : `<div class="t2">Portofoliu neinițializat — pornește botul din BOȚI LIVE.</div>`}
+        <div class="decizie"><b>Azi ar face:</b> ${decS}</div>
+      </div>
+      <div class="card-bot">
+        <div class="cap"><span class="titlu"><i style="background:var(--s-ai)"></i>AI HEDGE FUND</span><span class="stare-bot">${ledBot('ai')}</span></div>
+        ${pA ? `<div class="valoare-bot">${usd(pA.valoare, 0)} <span class="variatie ${pA.pl_procent >= 0 ? 'sus' : 'jos'}">${pct(pA.pl_procent, 2)}</span></div>
+                <div class="t2" style="font-size:12.5px">Buy &amp; Hold de la pornire: ${pct(pA.buyhold_procent, 2)} · expunere ${pct(pA.expunere * 100, 0, false)}</div>
+                <div class="expunere" title="Expunere BTC"><i style="width:${pA.expunere * 100}%"></i></div>`
+             : `<div class="t2">Portofoliu neinițializat — pornește botul din BOȚI LIVE.</div>`}
+        <div class="decizie"><b>Semnal ${esc(a.zi_semnal)}:</b> ${da}/12 experți văd trend ascendent → țintă ${pct(a.tinta_maine * 100, 0, false)}${a.funding_fierbinte ? ' (funding fierbinte)' : ''}</div>
+      </div>`;
+  } catch (e) {
+    $('#carduri-boti').innerHTML = `<div class="t2">Nu pot citi starea boților: ${esc(e.message)}</div>`;
+  }
+}
+
+// ----------------------------------------------------------------- grafice istoric
+async function incarcaIstoric() {
+  try {
+    const d = await api('/api/istoric?zile=' + stare.zileIstoric);
+    deseneaza('g-pret', () => configGrafic(v => '$' + nr(v / 1000, 0) + 'k', {
+      tooltip: { label: c => ' Preț: ' + usd(c.parsed.y, 0) } }),
+      { labels: d.data, datasets: [serie('Preț BTC', d.pret, CUL.pret, { fill: { target: 'origin', above: 'rgba(56,189,216,0.06)' } })] });
+    deseneaza('g-master', () => configGrafic(v => v.toFixed(1), {
+      zone: { buy: d.prag_buy, sell: d.prag_sell },
+      tooltip: { label: c => ' Master_Index: ' + c.parsed.y.toFixed(2) } }),
+      { labels: d.data, datasets: [serie('Master_Index', d.master, CUL.pret)] });
+  } catch (e) { toast('Istoric indisponibil: ' + e.message, true); }
+}
+
+// ----------------------------------------------------------------- comparație strategii
+async function incarcaComparatie() {
+  try {
+    const d = await api('/api/backtest');
+    $('#comparatie-perioada').textContent = `${d.start} → ${d.end} · capital inițial ${usd(d.capital)}`;
+    const idx = new Map(d.data.map((z, i) => [z, i]));
+    const raze = d.data.map(() => 0), marcaje = {};
+    d.marcaje_sdca.forEach(m => { const i = idx.get(m.data); if (i != null) { raze[i] = 6; marcaje[i] = m; } });
+    deseneaza('g-comparatie', () => configGrafic(v => '$' + nr(v / 1000, 0) + 'k', {
+      paddingDreapta: 185,
+      etichete: { activ: true, format: v => usd(v, 0) },
+      tooltip: {
+        label: c => ` ${c.dataset.label}: ${usd(c.parsed.y, 0)}`,
+        afterBody: items => {
+          const m = marcaje[items[0].dataIndex];
+          return m ? [``, `▲ SDCA: ${m.tip} ${m.motiv}`, `  ${usd(m.suma, 0)} @ ${usd(m.pret, 0)}`] : [];
+        } } }),
+      { labels: d.data, datasets: [
+        serie('SDCA v2', d.sdca, CUL.sdca, { pointRadius: raze, pointStyle: 'triangle', pointHoverRadius: 6 }),
+        serie('AI Hedge Fund', d.ai, CUL.ai),
+        serie('Buy & Hold', d.bh, CUL.bh) ] });
+    const s = d.statistici;
+    const rand = (k, nume, cul) => `<tr><td><span class="eticheta-tip" style="color:${cul};border-color:${cul}">●</span> ${nume}</td>
+      <td class="n">${usd(s[k].final)}</td><td class="n ${semnCls(s[k].total)}">${pct(s[k].total)}</td><td class="n">${pct(s[k].cagr)}</td>
+      <td class="n neg">${pct(s[k].max_dd)}</td><td class="n">${nr(s[k].sharpe, 2)}</td><td class="n">${s[k].tranzactii}</td></tr>`;
+    $('#tabel-comparatie').innerHTML = `<thead><tr><th>STRATEGIE</th><th class="n">CAPITAL FINAL</th><th class="n">RANDAMENT</th>
+      <th class="n">ANUAL (CAGR)</th><th class="n">DRAWDOWN MAX</th><th class="n">SHARPE</th><th class="n">TRANZACȚII</th></tr></thead>
+      <tbody>${rand('sdca', 'SDCA v2', CUL.sdca)}${rand('ai', 'AI Hedge Fund', CUL.ai)}${rand('bh', 'Buy &amp; Hold', CUL.bh)}</tbody>`;
+  } catch (e) { toast('Comparația strategiilor e indisponibilă: ' + e.message, true); }
+}
+
+// ----------------------------------------------------------------- BOȚI LIVE
+const INFO_BOTI = {
+  sdca: { titlu: 'SDCA v2 // MASTER_INDEX', cul: 'var(--s-sdca)',
+          descriere: 'Acumulează în zonele de subevaluare (Master_Index < -0.5), vinde 70% la euforie confirmată on-chain, apoi moonbag. Ciclu: date noi + decizie.' },
+  ai:   { titlu: 'AI HEDGE FUND // TREND & MOMENTUM', cul: 'var(--s-ai)',
+          descriere: '12 experți (6 trend SMA + 6 momentum) votează zilnic; procentul de voturi DA = expunerea BTC (trepte de 25%), cu filtru de funding.' },
+};
+
+function construiestePanouriBoti() {
+  $('#panouri-boti').innerHTML = ['sdca', 'ai'].map(k => `
+    <div class="panel" id="panou-${k}">
+      <h2><i style="width:10px;height:10px;border-radius:2px;background:${INFO_BOTI[k].cul};display:inline-block"></i>${INFO_BOTI[k].titlu}</h2>
+      <p class="t2" style="margin:-4px 0 12px;font-size:13.5px">${INFO_BOTI[k].descriere}</p>
+      <div class="stare-bot" id="status-${k}" style="margin-bottom:12px"><i class="led"></i>—</div>
+      <div class="rand-controale">
+        <label class="camp" id="camp-capital-${k}">CAPITAL INIȚIAL ($)<input type="number" id="capital-${k}" value="10000" min="10" step="any" style="width:120px"></label>
+        <label class="camp">CICLU (${k === 'sdca' ? 'ORE' : 'MINUTE'})<input type="number" id="interval-${k}" value="${k === 'sdca' ? 3 : 15}" min="${k === 'sdca' ? 0.25 : 1}" step="any" style="width:90px"></label>
+        <button class="btn primar" data-actiune="porneste" data-bot="${k}">▶ PORNEȘTE</button>
+        <button class="btn" data-actiune="opreste" data-bot="${k}">■ OPREȘTE</button>
+        <button class="btn" data-actiune="ciclu" data-bot="${k}">⟳ UN CICLU ACUM</button>
+        <button class="btn pericol" data-actiune="reseteaza" data-bot="${k}">RESETEAZĂ</button>
+      </div>
+      <h3>PORTOFOLIU VIRTUAL</h3>
+      <div class="tiles" id="tiles-${k}"></div>
+      <h3>SEMNAL CURENT</h3>
+      <div id="semnal-${k}"></div>
+      <h3>LOG LIVE</h3>
+      <div class="terminal" id="log-${k}">Se încarcă log-ul…</div>
+      ${k === 'ai' ? '<h3>ULTIMELE TRANZACȚII</h3><div class="tabel-wrap"><table id="jurnal-ai"></table></div>' : ''}
+    </div>`).join('');
+  $$('#panouri-boti [data-actiune]').forEach(b => b.addEventListener('click', () => actiuneBot(b.dataset.bot, b.dataset.actiune)));
+}
+
+const tile = (et, v, sub = '', cls = '') => `<div class="tile"><div class="et">${et}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+
+async function incarcaBoti() {
+  try {
+    const [s, a, b] = await Promise.all([api('/api/sdca'), api('/api/ai'), api('/api/boti')]);
+    stare.date.sdca = s; stare.date.ai = a; stare.boti = b;
+    actualizeazaStatusBoti(b);
+
+    const pS = s.portofoliu;
+    $('#tiles-sdca').innerHTML = pS
+      ? tile('VALOARE', usd(pS.valoare, 2), `din ${usd(pS.capital_initial)}`) +
+        tile('PROFIT / PIERDERE', pct(pS.pl_procent, 2), usd(pS.valoare - pS.capital_initial, 2), semnCls(pS.pl_procent)) +
+        tile('CASH', usd(pS.cash, 2)) + tile('BTC', nr(pS.btc, 6), pS.pret_mediu ? 'preț mediu ' + usd(pS.pret_mediu, 0) : '') +
+        tile('ULTIMA DECIZIE', esc(pS.ultima_rulare || '—'))
+      : `<div class="t2">Neinițializat. Alege capitalul și apasă PORNEȘTE sau UN CICLU ACUM.</div>`;
+    const c = s.context;
+    $('#semnal-sdca').innerHTML = `<div class="tiles">
+        ${tile('MASTER_INDEX', (c.master_index >= 0 ? '+' : '') + nr(c.master_index, 2), c.master_index < -0.5 ? 'zonă de acumulare' : c.master_index > 0.8 ? 'zonă de euforie' : 'zonă neutră')}
+        ${tile('MVRV AJUSTAT', nr(c.mvrv_ajustat, 2), `prag top ${nr(c.prag_mvrv_top, 2)}`)}
+        ${tile('SUB VÂRF 90Z', pct(-c.sub_varf_90z * 100, 1), `vârf ${usd(c.varf_90z)}`, 'neg')}
+        ${tile('SMA 50', usd(c.sma_50), s.pret < c.sma_50 ? 'prețul e sub medie' : 'prețul e peste medie')}</div>
+      <div class="decizie" style="margin-top:10px"><b>Decizia de azi (${esc(c.zi)}):</b>
+        ${s.previzualizare.mesaje.length ? s.previzualizare.mesaje.map(esc).join('<br>') : 'STANDBY — nicio condiție de execuție îndeplinită'}
+        <div class="muted" style="font-size:12px;margin-top:3px">${esc(s.previzualizare.nota)}</div></div>`;
+
+    const pA = a.portofoliu;
+    $('#tiles-ai').innerHTML = pA
+      ? tile('VALOARE', usd(pA.valoare, 2), `din ${usd(pA.capital_initial)}`) +
+        tile('PROFIT / PIERDERE', pct(pA.pl_procent, 2), `Buy & Hold: ${pct(pA.buyhold_procent, 2)}`, semnCls(pA.pl_procent)) +
+        tile('EXPUNERE BTC', pct(pA.expunere * 100, 0, false), `țintă ${pct(pA.tinta * 100, 0, false)}`) +
+        tile('CASH / BTC', usd(pA.cash, 0), nr(pA.btc, 6) + ' BTC') +
+        tile('TRANZACȚII', pA.nr_tranzactii, `comisioane ${usd(pA.comisioane, 2)}`)
+      : `<div class="t2">Neinițializat. Alege capitalul și apasă PORNEȘTE sau UN CICLU ACUM.</div>`;
+    $('#semnal-ai').innerHTML = `
+      <div class="voturi">${a.voturi.map(v => `<div class="vot ${v.da ? 'da' : 'nu'}" title="${v.grup}: ${v.da ? 'DA (trend ascendent)' : 'NU'}">${esc(v.nume)}<br>${v.da ? '▲' : '▼'}</div>`).join('')}</div>
+      <div class="tiles" style="margin-top:10px">
+        ${tile('SCOR FINAL', pct(a.scor_final * 100, 0, false), `trend ${pct(a.scor_trend * 100, 0, false)} · momentum ${pct(a.scor_momentum * 100, 0, false)}`)}
+        ${tile('ȚINTĂ EXPUNERE', pct(a.tinta_maine * 100, 0, false), 'pentru următoarea închidere')}
+        ${tile('FUNDING 7Z', nr(a.funding_7d, 4) + '%', a.funding_fierbinte ? '⚠ fierbinte: expunere ×0.5' : `normal (prag ${a.prag_funding}%)`)}
+        ${tile('VOLATILITATE 30Z', pct(a.volatilitate_30z * 100, 0, false), `RSI ${nr(a.rsi, 0)} · sub ATH ${pct(a.sub_ath * 100, 0)}`)}</div>
+      <p class="nota">Semnal calculat pe ziua închisă ${esc(a.zi_semnal)} (00:00 UTC).</p>`;
+    $('#jurnal-ai').innerHTML = a.jurnal.length
+      ? `<thead><tr><th>EXECUTAT</th><th>TIP</th><th class="n">PREȚ</th><th class="n">SUMĂ</th><th class="n">EXPUNERE</th><th class="n">PORTOFOLIU</th></tr></thead><tbody>` +
+        a.jurnal.map(t => `<tr><td class="num">${esc(t.Executat_la)}</td><td><span class="eticheta-tip ${t.Actiune}">${t.Actiune}</span></td>
+          <td class="n">${usd(t.Pret, 0)}</td><td class="n">${usd(t.Suma_USD, 2)}</td>
+          <td class="n">${pct(t.Expunere_veche * 100, 0, false)} → ${pct(t.Expunere_noua * 100, 0, false)}</td><td class="n">${usd(t.Valoare_portofoliu, 2)}</td></tr>`).join('') + '</tbody>'
+      : '<tbody><tr><td class="t2">Nicio tranzacție încă.</td></tr></tbody>';
+  } catch (e) { toast('Nu pot citi boții: ' + e.message, true); }
+}
+
+function actualizeazaStatusBoti(b) {
+  ['sdca', 'ai'].forEach(k => {
+    const s = b[k], el = $('#status-' + k);
+    if (!el) return;
+    el.innerHTML = s.ruleaza
+      ? `<i class="led ok"></i>RULEAZĂ AUTONOM · PORNIT ${esc(s.proces.pornit_la)} · CICLU LA ${s.proces.interval} ${s.proces.unitate.toUpperCase()}`
+      : s.ciclu_in_curs ? '<i class="led warn"></i>CICLU MANUAL ÎN CURS…' : '<i class="led"></i>OPRIT';
+    const ocupat = s.ruleaza || s.ciclu_in_curs;
+    $(`[data-actiune="porneste"][data-bot="${k}"]`).disabled = ocupat;
+    $(`[data-actiune="ciclu"][data-bot="${k}"]`).disabled = ocupat;
+    $(`[data-actiune="reseteaza"][data-bot="${k}"]`).disabled = ocupat || !s.initializat;
+    $(`[data-actiune="opreste"][data-bot="${k}"]`).disabled = !s.ruleaza;
+    $('#capital-' + k).disabled = s.initializat;
+    $('#camp-capital-' + k).title = s.initializat ? 'Portofoliul există deja. Resetează-l pentru un capital nou.' : '';
+    $('#interval-' + k).disabled = s.ruleaza;
+  });
+}
+
+async function actiuneBot(bot, actiune) {
+  const capital = parseFloat($('#capital-' + bot).value) || null;
+  const interval = parseFloat($('#interval-' + bot).value) || null;
+  if (actiune === 'reseteaza') {
+    const ok = await confirma('RESETARE PORTOFOLIU', `Portofoliul virtual ${bot === 'sdca' ? 'SDCA v2' : 'AI Hedge Fund'} va fi ARHIVAT (nu șters), iar următoarea pornire începe un portofoliu nou. Continui?`);
+    if (!ok) return;
+  }
+  try {
+    const r = await post(`/api/boti/${bot}/${actiune}`, actiune === 'opreste' || actiune === 'reseteaza' ? {} : { capital, interval });
+    toast({ porneste: 'Bot pornit în mod autonom.', opreste: 'Bot oprit. Portofoliul rămâne salvat.',
+            ciclu: 'Ciclu pornit — urmărește log-ul.', reseteaza: 'Portofoliu arhivat: ' + ((r.arhivate || []).join(', ') || 'nimic de arhivat') }[actiune]);
+    actualizeazaStatusBoti(await api('/api/boti'));
+    setTimeout(() => { incarcaLoguri(); incarcaBoti(); }, 1200);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function incarcaLoguri() {
+  for (const k of ['sdca', 'ai']) {
+    const el = $('#log-' + k);
+    if (!el) continue;
+    try {
+      const { linii } = await api(`/api/boti/${k}/log?linii=300`);
+      const jos = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      el.innerHTML = linii.length ? linii.map(l => {
+        const cls = /\[PLATFORMĂ/.test(l) ? 'platforma' : /❌|Eroare|Traceback/.test(l) ? 'eroare' : /TRANZACȚIE|BUY|SELL/.test(l) ? 'tranz' : '';
+        return cls ? `<span class="${cls}">${esc(l)}</span>` : esc(l);
+      }).join('\n') : 'Log gol. Pornește botul sau rulează un ciclu.';
+      if (jos) el.scrollTop = el.scrollHeight;
+    } catch (_) { /* serverul poate fi ocupat; reîncercăm la următorul tick */ }
+  }
+}
+
+// ----------------------------------------------------------------- BACKTEST
+async function ruleazaBacktest(ev) {
+  ev.preventDefault();
+  const strategie = $('#bt-strategie').value, start = $('#bt-start').value, capital = parseFloat($('#bt-capital').value);
+  const buton = $('#bt-ruleaza');
+  buton.disabled = true;
+  $('#bt-rezultate').innerHTML = '<div class="panel" style="margin-top:18px"><div class="incarcare">Rulez simularea zi cu zi</div></div>';
+  try {
+    const d = await post('/api/backtest/' + strategie, { start, capital });
+    stare.bt = { strategie, d };
+    stare.filtruBt = 'toate';
+    afiseazaBacktest();
+  } catch (e) {
+    $('#bt-rezultate').innerHTML = `<div class="panel" style="margin-top:18px"><div class="t2">${esc(e.message)}</div></div>`;
+  } finally { buton.disabled = false; }
+}
+
+function afiseazaBacktest() {
+  const { strategie, d } = stare.bt;
+  const s = d.statistici.strategie, b = d.statistici.buy_hold, f = d.final;
+  const cul = strategie === 'sdca' ? CUL.sdca : CUL.ai, nume = strategie === 'sdca' ? 'SDCA v2' : 'AI Hedge Fund';
+  const profit = s.final - d.capital;
+  const extra = strategie === 'sdca'
+    ? tile('PROFIT REALIZAT', usd(f.profit_realizat, 2), 'din vânzări', semnCls(f.profit_realizat)) +
+      tile('PROFIT NEREALIZAT', usd(f.profit_nerealizat, 2), f.pret_mediu ? 'preț mediu ' + usd(f.pret_mediu, 0) : 'fără BTC', semnCls(f.profit_nerealizat)) +
+      tile('POZIȚIE FINALĂ', usd(f.cash, 0) + ' cash', nr(f.btc, 6) + ' BTC (' + usd(f.valoare_btc, 0) + ')') +
+      tile('TRANZACȚII', f.nr_cumparari + f.nr_vanzari, `${f.nr_cumparari} cumpărări · ${f.nr_vanzari} vânzări`) +
+      tile('COMISIOANE', usd(f.comisioane, 2), '0.10% + 0.05% slippage')
+    : tile('EXPUNERE MEDIE', pct(f.expunere_medie * 100, 0, false), 'finală ' + pct(f.expunere_finala * 100, 0, false)) +
+      tile('TRANZACȚII', f.nr_tranzactii, 'rebalansări în trepte de 25%') +
+      tile('COMISIOANE', usd(f.comisioane, 2), '0.10% + 0.05% slippage');
+
+  $('#bt-rezultate').innerHTML = `
+    <div class="panel" style="margin-top:18px">
+      <h2>RAPORT // ${nume.toUpperCase()} · ${esc(d.start)} → ${esc(d.end)}</h2>
+      <div class="tiles">
+        ${tile('CAPITAL INIȚIAL', usd(d.capital, 2))}
+        ${tile('CAPITAL FINAL', usd(s.final, 2), 'Buy & Hold: ' + usd(b.final, 0))}
+        ${tile('PROFIT NET', usd(profit, 2), pct(s.total, 2), semnCls(profit))}
+        ${tile('RANDAMENT ANUAL', pct(s.cagr, 1), 'Buy & Hold: ' + pct(b.cagr, 1), semnCls(s.cagr))}
+        ${tile('DRAWDOWN MAXIM', pct(s.max_dd, 1, false), 'Buy & Hold: ' + pct(b.max_dd, 1, false), 'neg')}
+        ${tile('SHARPE', nr(s.sharpe, 2), 'Buy & Hold: ' + nr(b.sharpe, 2))}
+        ${extra}
+      </div>
+      <div class="antet-grafic" style="margin-top:16px">
+        <span class="titlu-grafic">Valoarea portofoliului</span>
+        <div class="legenda"><span><i style="background:${cul}"></i>${nume}</span><span><i style="background:var(--s-bh)"></i>Buy &amp; Hold</span></div>
+      </div>
+      <div class="grafic mare"><canvas id="g-bt"></canvas></div>
+    </div>
+    <div class="doua-col" style="margin-top:18px">
+      <div class="panel">
+        <h2>PE ANI</h2>
+        <div class="tabel-wrap"><table>
+          <thead><tr><th>AN</th><th class="n">${nume.toUpperCase()}</th><th class="n">BUY &amp; HOLD</th><th class="n">DRAWDOWN</th></tr></thead>
+          <tbody>${d.pe_ani.map(a => `<tr><td class="num">${a.an}</td><td class="n ${semnCls(a.strategie)}">${pct(a.strategie)}</td>
+            <td class="n ${semnCls(a.buy_hold)}">${pct(a.buy_hold)}</td><td class="n neg">${pct(a.max_dd, 1, false)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="panel">
+        <h2>JURNAL // DE CE A TRANZACȚIONAT</h2>
+        <div class="segment" id="seg-jurnal" style="margin-bottom:12px">
+          <button data-f="toate" class="activ">TOATE</button><button data-f="BUY">CUMPĂRĂRI</button><button data-f="SELL">VÂNZĂRI</button>
+          ${strategie === 'sdca' ? '<button data-f="EV">EVENIMENTE</button>' : ''}
+        </div>
+        <div class="jurnal" id="bt-jurnal"></div>
+      </div>
+    </div>`;
+
+  deseneaza('g-bt', () => configGrafic(v => '$' + nr(v / 1000, 0) + 'k', {
+    paddingDreapta: 185, etichete: { activ: true, format: v => usd(v, 0) },
+    tooltip: { label: c => ` ${c.dataset.label}: ${usd(c.parsed.y, 0)}` } }),
+    { labels: d.serii.data, datasets: [serie(nume, d.serii.strategie, cul), serie('Buy & Hold', d.serii.buy_hold, CUL.bh)] });
+  $$('#seg-jurnal button').forEach(btn => btn.addEventListener('click', () => {
+    stare.filtruBt = btn.dataset.f;
+    $$('#seg-jurnal button').forEach(x => x.classList.toggle('activ', x === btn));
+    afiseazaJurnalBt();
+  }));
+  afiseazaJurnalBt();
+}
+
+function afiseazaJurnalBt() {
+  const { strategie, d } = stare.bt, f = stare.filtruBt;
+  let intrari = d.tranzactii.map(t => ({ ...t, _tip: strategie === 'sdca' ? t.Tip : t.Actiune }));
+  if (strategie === 'sdca') intrari = intrari.concat((d.evenimente || []).map(e => ({ ...e, _tip: 'EV' })));
+  intrari.sort((a, b) => a.Data < b.Data ? -1 : a.Data > b.Data ? 1 : (a._tip === 'EV' ? -1 : 1));
+  if (f !== 'toate') intrari = intrari.filter(t => t._tip === f);
+  const total = intrari.length;
+  const html = intrari.slice(0, 800).map((t, i) => {
+    if (t._tip === 'EV') return `<div class="intrare EV"><div class="linie1"><span class="data">${esc(t.Data)}</span>
+      <span class="eticheta-tip EV">EVENIMENT</span><span class="motiv">${esc(t.Eveniment)}</span></div><div class="dece">↳ ${esc(t.De_ce)}</div></div>`;
+    const sdca = strategie === 'sdca';
+    const motiv = sdca ? t.Motiv : `REBALANSARE ${pct(t.Expunere_veche * 100, 0, false)} → ${pct(t.Expunere_noua * 100, 0, false)}`;
+    const dupa = sdca
+      ? `după: cash ${usd(t.Cash_dupa, 2)} · BTC ${nr(t.BTC_dupa, 6)} · portofoliu ${usd(t.Valoare_portofoliu, 2)} · P/L total ${pct(t['PL_total_%'], 2)}`
+      : `după: portofoliu ${usd(t.Valoare_portofoliu, 2)}`;
+    const profit = sdca && t._tip === 'SELL' && t.Profit_realizat != null
+      ? `<div class="dupa ${semnCls(t.Profit_realizat)}">profit realizat ${usd(t.Profit_realizat, 2)} (preț mediu ${usd(t.Pret_mediu, 0)})</div>` : '';
+    return `<div class="intrare ${t._tip}"><div class="linie1"><span class="data">${esc(t.Data)}</span>
+      <span class="eticheta-tip ${t._tip}">${t._tip}</span><span class="motiv">${esc(motiv)}</span>
+      <span class="suma">${usd(t.Suma_USD, 2)} @ ${usd(t.Pret, 0)}</span></div>
+      <div class="dece">↳ ${esc(t.De_ce)}</div>${profit}<div class="dupa">${dupa}</div></div>`;
+  }).join('');
+  $('#bt-jurnal').innerHTML = (html || '<div class="t2">Nicio intrare pentru acest filtru.</div>') +
+    (total > 800 ? `<p class="nota">Se afișează primele 800 din ${total}.</p>` : '');
+}
+
+// ----------------------------------------------------------------- consola asistent
+function adaugaMesaj(text, tip) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + tip; el.textContent = text;
+  $('#mesaje').appendChild(el); $('#mesaje').scrollTop = $('#mesaje').scrollHeight;
+}
+async function trimiteIntrebare(ev) {
+  ev.preventDefault();
+  const q = $('#intrebare').value.trim();
+  if (!q) return;
+  adaugaMesaj(q, 'tu'); $('#intrebare').value = '';
+  $('#reactor').classList.add('vorbeste');
+  try {
+    const r = await post('/api/chat', { mesaj: q });
+    adaugaMesaj(r.raspuns || '', 'jarvis');
+  } catch (e) { adaugaMesaj(e.message, 'sistem'); }
+  finally { setTimeout(() => $('#reactor').classList.remove('vorbeste'), 900); }
+}
+
+// ----------------------------------------------------------------- actualizare date
+async function actualizeazaDate() {
+  const b = $('#btn-actualizeaza');
+  b.disabled = true; b.textContent = '⟳ SE ACTUALIZEAZĂ…';
+  try {
+    await post('/api/actualizeaza');
+    let s;
+    do { await new Promise(r => setTimeout(r, 3000)); s = await api('/api/actualizeaza'); } while (s.ruleaza);
+    const r = s.rezultat || {};
+    toast(r.pipeline && r.date_ai ? 'Date actualizate: pipeline Master_Index + istoric AI.' :
+      `Actualizare parțială — pipeline: ${r.pipeline ? 'OK' : 'eșuat'}, date AI: ${r.date_ai ? 'OK' : 'eșuat'}.`, !(r.pipeline && r.date_ai));
+    reincarcaTot();
+  } catch (e) { toast('Actualizarea a eșuat: ' + e.message, true); }
+  finally { b.disabled = false; b.textContent = '⟳ ACTUALIZEAZĂ DATE'; }
+}
+
+function reincarcaTot() {
+  incarcaPiata(); incarcaCarduriBoti(); incarcaIstoric(); incarcaComparatie();
+  if (stare.pagina === 'boti') incarcaBoti();
+}
+
+// ----------------------------------------------------------------- pornire
+document.addEventListener('DOMContentLoaded', () => {
+  boot();
+  ceas(); setInterval(ceas, 1000);
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.font.family = 'Rajdhani, sans-serif';
+    Chart.defaults.color = CUL.text2;
+  } else {
+    toast('Librăria de grafice nu s-a încărcat (verifică internetul). Restul platformei funcționează.', true);
+  }
+  construiestePanouriBoti();
+
+  $$('nav.tabs button').forEach(b => b.addEventListener('click', () => arataPagina(b.dataset.pagina)));
+  $$('[data-mergi]').forEach(b => b.addEventListener('click', () => arataPagina(b.dataset.mergi)));
+  $$('#seg-istoric button').forEach(b => b.addEventListener('click', () => {
+    stare.zileIstoric = +b.dataset.zile;
+    $$('#seg-istoric button').forEach(x => x.classList.toggle('activ', x === b));
+    incarcaIstoric();
+  }));
+  $('#form-backtest').addEventListener('submit', ruleazaBacktest);
+  $('#bt-strategie').addEventListener('change', e => { $('#bt-start').value = e.target.value === 'sdca' ? '2023-02-15' : '2018-08-17'; });
+  $('#form-chat').addEventListener('submit', trimiteIntrebare);
+  $('#btn-actualizeaza').addEventListener('click', actualizeazaDate);
+
+  reincarcaTot();
+  const ultima = mem.get('jarvis-pagina');
+  if (ultima && ultima !== 'comanda' && $('#p-' + ultima)) arataPagina(ultima);
+
+  setInterval(incarcaPiata, 15000);
+  setInterval(() => { if (stare.pagina === 'comanda') incarcaCarduriBoti(); }, 30000);
+  setInterval(async () => {
+    if (stare.pagina !== 'boti') return;
+    incarcaLoguri();
+    try { actualizeazaStatusBoti(await api('/api/boti')); } catch (_) { /* reîncercăm */ }
+  }, 4000);
+  setInterval(() => { if (stare.pagina === 'boti') incarcaBoti(); }, 20000);
+});
