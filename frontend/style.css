@@ -158,6 +158,10 @@ main { position: relative; z-index: 1; padding: 18px 22px 40px; max-width: 1680p
 .pret-mare { font-family: var(--font-num); font-size: 34px; font-weight: 600; letter-spacing: -.01em;
   color: var(--text); text-shadow: 0 0 18px rgba(0, 225, 255, .25); }
 .variatie { font-family: var(--font-num); font-size: 14px; margin-left: 8px; }
+.pret-mare { transition: color .9s ease, text-shadow .9s ease; }
+.pret-mare.flash-sus { color: var(--good); text-shadow: 0 0 18px rgba(52, 209, 126, .55); transition: none; }
+.pret-mare.flash-jos { color: var(--bad); text-shadow: 0 0 18px rgba(255, 90, 110, .5); transition: none; }
+.sursa-pret { font-family: var(--font-num); font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; }
 .variatie.sus { color: var(--good); } .variatie.jos { color: var(--bad); }
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 13.5px; margin-top: 10px; }
 .kv dt { color: var(--text-2); } .kv dd { margin: 0; text-align: right; font-family: var(--font-num); }

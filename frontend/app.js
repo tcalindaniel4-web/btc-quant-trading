@@ -187,22 +187,85 @@ function deseneaza(id, cfgFn, date) {
 const serie = (label, data, cul, extra = {}) => ({ label, data, borderColor: cul, backgroundColor: cul, pointBackgroundColor: cul,
   pointBorderColor: '#08131d', pointBorderWidth: 2, ...extra });
 
+// ----------------------------------------------------------------- PREȚ ÎN TIMP REAL (WebSocket Binance)
+// Browserul se conectează direct la fluxul public Binance (fără cheie): prețul vine la ~1 secundă, fără să
+// treacă prin server. Dacă fluxul pică, reconectare automată, iar între timp prețul vine din server la 15 s.
+const WS_URLURI = ['wss://stream.binance.com:9443/ws/btcusdt@ticker', 'wss://stream.binance.com:443/ws/btcusdt@ticker'];
+stare.live = { ws: null, ultimMesaj: 0, pret: null, incercari: 0, ultimDesenHm: 0 };
+const liveActiv = () => Date.now() - stare.live.ultimMesaj < 6000;
+
+function afiseazaPret(p) {
+  const el = $('#pret'), vechi = stare.live.pretAfisat;
+  el.textContent = usd(p.pret, 2);
+  if (vechi != null && p.pret !== vechi) {          // clipire verde / roșie la fiecare schimbare de preț
+    el.classList.remove('flash-sus', 'flash-jos');
+    void el.offsetWidth;
+    el.classList.add(p.pret > vechi ? 'flash-sus' : 'flash-jos');
+    clearTimeout(stare.live.tFlash);
+    stare.live.tFlash = setTimeout(() => el.classList.remove('flash-sus', 'flash-jos'), 350);
+  }
+  stare.live.pretAfisat = p.pret;
+  if (p.variatie != null) {
+    const elv = $('#variatie');
+    elv.textContent = (p.variatie >= 0 ? '▲ ' : '▼ ') + pct(p.variatie, 2);
+    elv.className = 'variatie ' + (p.variatie >= 0 ? 'sus' : 'jos');
+  }
+  if (p.max != null) $('#max24').textContent = usd(p.max, 0);
+  if (p.min != null) $('#min24').textContent = usd(p.min, 0);
+  if (p.volum != null) $('#vol24').textContent = compact(p.volum);
+  document.title = `${usd(p.pret, 0)} · J.A.R.V.I.S.`;
+}
+
+function pornesteWS() {
+  if (!('WebSocket' in window)) return;
+  const url = WS_URLURI[stare.live.incercari % WS_URLURI.length];
+  let ws;
+  try { ws = new WebSocket(url); } catch (_) { return programeazaReconectare(); }
+  stare.live.ws = ws;
+  ws.onmessage = ev => {
+    let t;
+    try { t = JSON.parse(ev.data); } catch (_) { return; }
+    if (!t || t.c == null) return;
+    stare.live.ultimMesaj = Date.now();
+    stare.live.incercari = 0;
+    const p = { pret: +t.c, variatie: +t.P, max: +t.h, min: +t.l, volum: +t.q };
+    stare.live.pret = p.pret;
+    afiseazaPret(p);
+    $('#led-binance').className = 'led ok';
+    $('#sursa-pret').innerHTML = '<i class="led ok puls"></i>LIVE · Binance WebSocket';
+    if (Date.now() - stare.live.ultimDesenHm > 1000) {   // heatmap-ul: cel mult o redesenare pe secundă
+      stare.live.ultimDesenHm = Date.now();
+      actualizeazaPretHeatmap(p.pret);
+    }
+  };
+  ws.onclose = () => { if (stare.live.ws === ws) programeazaReconectare(); };
+  ws.onerror = () => { try { ws.close(); } catch (_) { /* deja închis */ } };
+}
+
+function programeazaReconectare() {
+  stare.live.ws = null;
+  stare.live.incercari++;
+  $('#sursa-pret').innerHTML = '<i class="led warn"></i>reconectare la fluxul live… (preț din server la 15 s)';
+  setTimeout(pornesteWS, Math.min(30000, 1500 * 2 ** Math.min(stare.live.incercari, 5)));
+}
+
+function pazaWS() {   // dacă fluxul tace (rețea blocată, tab adormit), îl repornim
+  const ws = stare.live.ws;
+  if (ws && ws.readyState === WebSocket.OPEN && Date.now() - stare.live.ultimMesaj > 15000) ws.close();
+}
+
 // ----------------------------------------------------------------- PIAȚĂ
 async function incarcaPiata() {
   try {
     const d = await api('/api/piata');
     stare.date.piata = d;
-    $('#pret').textContent = usd(d.pret, 2);
-    const v = d.live && d.live.ok ? d.live.variatie_24h : null;
-    const elv = $('#variatie');
-    elv.textContent = v == null ? '' : (v >= 0 ? '▲ ' : '▼ ') + pct(v, 2);
-    elv.className = 'variatie ' + (v >= 0 ? 'sus' : 'jos');
-    $('#max24').textContent = d.live.ok ? usd(d.live.max_24h, 0) : '—';
-    $('#min24').textContent = d.live.ok ? usd(d.live.min_24h, 0) : '—';
-    $('#vol24').textContent = d.live.ok ? compact(d.live.volum_24h_usd) : '—';
+    if (!liveActiv()) {   // prețul vine din WebSocket când e conectat; serverul e doar rezervă
+      afiseazaPret({ pret: d.pret, variatie: d.live.ok ? d.live.variatie_24h : null,
+                     max: d.live.ok ? d.live.max_24h : null, min: d.live.ok ? d.live.min_24h : null,
+                     volum: d.live.ok ? d.live.volum_24h_usd : null });
+      $('#led-binance').className = 'led ' + (d.live.ok ? 'ok' : 'bad');
+    }
     $('#rsi').textContent = nr(d.master.rsi, 1);
-
-    $('#led-binance').className = 'led ' + (d.live.ok ? 'ok' : 'bad');
     $('#led-master').className = 'led ' + (d.prospetime.la_zi ? 'ok' : 'warn');
     const zileOnchain = d.prospetime.onchain_zi ? Math.round((new Date(d.prospetime.azi_utc) - new Date(d.prospetime.onchain_zi)) / 864e5) : 99;
     $('#led-onchain').className = 'led ' + (zileOnchain <= 9 ? 'ok' : 'warn');
@@ -221,11 +284,11 @@ async function incarcaPiata() {
         <span class="bara"><i class="${c.contributie < 0 ? 'neg' : ''}" style="left:${stanga}%;width:${w}%"></i></span>
         <span class="val">${(c.contributie >= 0 ? '+' : '') + c.contributie.toFixed(2)}</span></div>`;
     }).join('');
-    actualizeazaPretHeatmap(d.pret);
+    if (!liveActiv()) actualizeazaPretHeatmap(d.pret);
     $('#nota-onchain').textContent = `Master_Index din ${m.data}. Date on-chain (MVRV, SOPR) din ${m.data_onchain || '—'}: ` +
       `BGeometrics gratuit le publică cu ~7 zile întârziere, exact cum le folosește și backtest-ul.`;
   } catch (e) {
-    $('#led-binance').className = 'led bad';
+    if (!liveActiv()) $('#led-binance').className = 'led bad';
     toast('Nu pot citi datele de piață: ' + e.message, true);
   }
 }
@@ -813,5 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (stare.pagina === 'heatmap') incarcaHeatmap(); }, 60000);
   verificaStatus();
   setInterval(verificaStatus, 30000);
+  pornesteWS();
+  setInterval(pazaWS, 5000);
   setInterval(eticheteLiveHeatmap, 1000);
 });
