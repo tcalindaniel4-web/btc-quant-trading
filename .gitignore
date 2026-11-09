@@ -1,0 +1,26 @@
+# --- Secrete (tokenul API) ---
+.env
+
+# --- Python ---
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# --- Date generate automat (se recreează cu pipeline-ul / date_ai.py) ---
+backend/data/*.csv
+backend/strategii/ai_hedgefund/data/
+
+# --- Rezultate backtest (se regenerează la fiecare rulare) ---
+backend/strategii/*/rezultate/
+
+# --- Starea portofoliilor virtuale (se schimbă la fiecare ciclu al boților) ---
+backend/strategii/sdca/bot_state*.json
+backend/strategii/ai_hedgefund/stare_live*.json
+
+# --- Sistem / editor ---
+.claude/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
