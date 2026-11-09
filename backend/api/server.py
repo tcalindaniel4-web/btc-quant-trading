@@ -12,6 +12,7 @@ Expune datele existente ale proiectului, FĂRĂ să dubleze logica strategiilor:
   GET  /api/boti         starea boților live; POST /api/boti/<bot>/porneste|opreste|ciclu|reseteaza
   GET  /api/boti/<bot>/log    ultimele linii din log-ul botului
   POST /api/actualizeaza descarcă date noi (pipeline + date AI), în fundal
+  GET  /api/status       versiunea datelor + starea actualizării automate (pipeline la 60 min, AI zilnic)
   POST /api/chat         asistentul - se activează în etapa finală (cheie Anthropic)
 
 Pornire (din folderul proiectului):
@@ -20,6 +21,7 @@ Pornire (din folderul proiectului):
 import copy
 import json
 import math
+import os
 import subprocess
 import sys
 import threading
@@ -268,28 +270,76 @@ def _calculeaza_backtest():
 
 
 # ----------------------------------------------------------------------------- actualizare date
-_actualizare = {'ruleaza': False, 'ultima': None, 'rezultat': None}
+# Actualizare AUTOMATĂ în fundal (cât timp serverul rulează):
+#   - pipeline-ul Master_Index (preț, indicatori, funding, on-chain) dacă datele sunt mai vechi de 60 min
+#     (BGeometrics rămâne descărcat cel mult o dată pe zi, prin cache)
+#   - istoricul zilnic AI (Binance 2017+) la fiecare zi nouă închisă (00:00 UTC)
+# Dacă botul respectiv rulează deja, el își actualizează singur datele -> serverul nu se suprapune.
+# Dezactivare: variabila de mediu JARVIS_AUTO_UPDATE=0.
+AUTO_ACTIV = os.environ.get('JARVIS_AUTO_UPDATE', '1') != '0'
+AUTO_VERIFICARE_SEC = 300
+AUTO_PIPELINE_MIN = 60
+_lock_actualizare = threading.Lock()
+_actualizare = {'ruleaza': False, 'ultima': None, 'rezultat': None, 'sursa': None}
+_auto = {'activ': AUTO_ACTIV, 'interval_pipeline_min': AUTO_PIPELINE_MIN, 'ultima_verificare': None,
+         'urmatoarea_verificare': None, 'ultima_actualizare': None, 'ultimul_rezultat': None}
 
 
-def _ruleaza_actualizarea():
-    _actualizare.update(ruleaza=True, rezultat=None)
+def _acum():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _ruleaza_actualizarea(pipeline=True, ai=True, sursa='manual'):
+    if not _lock_actualizare.acquire(blocking=False):
+        return None                                   # deja în curs
+    _actualizare.update(ruleaza=True, rezultat=None, sursa=sursa)
+    rezultat = {'pipeline': None, 'date_ai': None, 'log': ''}
     try:
-        r = subprocess.run([sys.executable, str(BACKEND_DIR / 'pipeline' / 'actualizeaza_date.py')],
-                           capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
-                           env={**__import__('os').environ, 'PYTHONIOENCODING': 'utf-8'})
-        ok_pipeline = r.returncode == 0
-        try:
-            date_ai.actualizeaza_tot()
-            ok_ai = True
-        except Exception:
-            ok_ai = False
+        if pipeline:
+            r = subprocess.run([sys.executable, str(BACKEND_DIR / 'pipeline' / 'actualizeaza_date.py')],
+                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
+                               env={**os.environ, 'PYTHONIOENCODING': 'utf-8'})
+            rezultat['pipeline'] = r.returncode == 0
+            rezultat['log'] = (r.stdout or '')[-2500:]
+        if ai:
+            try:
+                date_ai.actualizeaza_tot()
+                rezultat['date_ai'] = True
+            except Exception:
+                rezultat['date_ai'] = False
         cache.date.clear()
-        _actualizare['rezultat'] = {'pipeline': ok_pipeline, 'date_ai': ok_ai,
-                                    'log': (r.stdout or '')[-2500:]}
     except Exception as e:
-        _actualizare['rezultat'] = {'pipeline': False, 'date_ai': False, 'log': str(e)}
+        rezultat.update(pipeline=False if pipeline else None, log=str(e))
     finally:
-        _actualizare.update(ruleaza=False, ultima=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        _actualizare.update(ruleaza=False, ultima=_acum(), rezultat=rezultat)
+        _lock_actualizare.release()
+    return rezultat
+
+
+def _bucla_auto():
+    """Verifică la fiecare 5 minute dacă datele trebuie reîmprospătate."""
+    time.sleep(5)   # lăsăm serverul să pornească
+    while True:
+        try:
+            p = DATA_DIR / 'master_dataset.csv'
+            vechime_min = (time.time() - p.stat().st_mtime) / 60 if p.exists() else 1e9
+            pipeline = vechime_min > AUTO_PIPELINE_MIN and not control_boti.status('sdca')['ruleaza']
+            ai = not bot_live_ai.date_la_zi() and not control_boti.status('ai')['ruleaza']
+            _auto['ultima_verificare'] = _acum()
+            if pipeline or ai:
+                rez = _ruleaza_actualizarea(pipeline=pipeline, ai=ai, sursa='automat')
+                if rez is not None:
+                    _auto.update(ultima_actualizare=_acum(), ultimul_rezultat=rez)
+        except Exception as e:
+            _auto['ultimul_rezultat'] = {'eroare': str(e)}
+        _auto['urmatoarea_verificare'] = datetime.fromtimestamp(time.time() + AUTO_VERIFICARE_SEC).strftime('%Y-%m-%d %H:%M:%S')
+        time.sleep(AUTO_VERIFICARE_SEC)
+
+
+@app.on_event("startup")
+def porneste_auto():
+    if AUTO_ACTIV:
+        threading.Thread(target=_bucla_auto, daemon=True, name='jarvis-auto-update').start()
 
 
 @app.post("/api/actualizeaza")
@@ -304,13 +354,25 @@ def actualizeaza_status():
     return _actualizare
 
 
+@app.get("/api/status")
+def status_platforma():
+    """Versiunea datelor: frontend-ul o verifică periodic și redesenează doar când s-a schimbat ceva."""
+    fisiere = (DATA_DIR / 'master_dataset.csv', date_ai.DATA_DIR / 'btc_1d.csv', date_ai.DATA_DIR / 'funding_1d.csv',
+               SDCA_STARE, bot_live_ai.STARE, bot_live_ai.JURNAL)
+    versiune = format(abs(hash(mtime(*fisiere))), 'x')
+    m = DATA_DIR / 'master_dataset.csv'
+    return {'versiune_date': versiune, 'auto': _auto, 'actualizare': _actualizare,
+            'master_actualizat': datetime.fromtimestamp(m.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S') if m.exists() else None,
+            'boti': {b: control_boti.status(b)['ruleaza'] for b in control_boti.BOTI}}
+
+
 # ----------------------------------------------------------------------------- heatmap lichidări (Open Interest)
 @app.get("/api/heatmap")
 def heatmap(interval: str = '1h'):
     if interval not in heatmap_oi.INTERVALE:
         raise HTTPException(422, f"Interval invalid. Alege: {', '.join(heatmap_oi.INTERVALE)}")
     try:
-        return curat(cache.ia('heatmap_' + interval, 120, None, lambda: heatmap_oi.calculeaza(interval)))
+        return curat(cache.ia('heatmap_' + interval, 55, None, lambda: heatmap_oi.calculeaza(interval)))
     except Exception as e:
         raise HTTPException(502, f"Nu pot descărca datele Binance Futures: {e}")
 

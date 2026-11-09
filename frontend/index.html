@@ -28,6 +28,7 @@
         <span title="Prețul live de pe Binance"><i class="led" id="led-binance"></i>BINANCE</span>
         <span title="Master_Index (pipeline zilnic)"><i class="led" id="led-master"></i>PIPELINE</span>
         <span title="Date on-chain BGeometrics (întârziere normală 7 zile)"><i class="led" id="led-onchain"></i>ON-CHAIN</span>
+        <span id="auto-status" title="Actualizare automată"><i class="led" id="led-auto"></i>AUTO <b class="num" id="auto-ora"></b></span>
       </div>
       <button class="btn" id="btn-actualizeaza" title="Descarcă date noi: Binance, BGeometrics, istoric AI">⟳ ACTUALIZEAZĂ DATE</button>
       <div class="ceas"><span id="ceas-local">--:--:--</span><small id="ceas-utc">UTC --:--</small></div>
@@ -144,6 +145,7 @@
     <section class="pagina" id="p-heatmap">
       <div class="panel">
         <h2>HEATMAP LICHIDĂRI // OPEN INTEREST BINANCE</h2>
+        <p class="hm-live" id="hm-live"><i class="led"></i>—</p>
         <div class="antet-grafic">
           <div class="segment" id="seg-hm-interval">
             <button data-iv="15m">15M · 5 ZILE</button><button data-iv="1h" class="activ">1H · 29 ZILE</button><button data-iv="4h">4H · 29 ZILE</button>

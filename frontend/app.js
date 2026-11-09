@@ -221,6 +221,7 @@ async function incarcaPiata() {
         <span class="bara"><i class="${c.contributie < 0 ? 'neg' : ''}" style="left:${stanga}%;width:${w}%"></i></span>
         <span class="val">${(c.contributie >= 0 ? '+' : '') + c.contributie.toFixed(2)}</span></div>`;
     }).join('');
+    actualizeazaPretHeatmap(d.pret);
     $('#nota-onchain').textContent = `Master_Index din ${m.data}. Date on-chain (MVRV, SOPR) din ${m.data_onchain || '—'}: ` +
       `BGeometrics gratuit le publică cu ~7 zile întârziere, exact cum le folosește și backtest-ul.`;
   } catch (e) {
@@ -453,11 +454,33 @@ function culoareHM(f) {   // rampă secvențială, o singură nuanță (cyan), l
   return RAMPA_HM[RAMPA_HM.length - 1][1];
 }
 
+// Între recalculările modelului (la 60 s), lumânarea curentă urmează prețul live (actualizat la 15 s).
+function actualizeazaPretHeatmap(pret) {
+  const h = stare.hm.d;
+  if (!h || !pret) return;
+  const u = h.pret.close.length - 1;
+  h.pret.close[u] = pret;
+  h.pret.high[u] = Math.max(h.pret.high[u], pret);
+  h.pret.low[u] = Math.min(h.pret.low[u], pret);
+  h.pret_curent = pret;
+  stare.hm.pretLa = Date.now();
+  if (stare.pagina === 'heatmap') deseneazaHeatmap();
+}
+
+function eticheteLiveHeatmap() {
+  if (stare.pagina !== 'heatmap' || !stare.hm.calculatLa) return;
+  const sec = t => Math.max(0, Math.round((Date.now() - t) / 1000));
+  const model = sec(stare.hm.calculatLa), pret = stare.hm.pretLa ? sec(stare.hm.pretLa) : null;
+  $('#hm-live').innerHTML = `<i class="led ok puls"></i>LIVE · model recalculat acum ${model}s (la fiecare 60 s)` +
+    (pret != null ? ` · preț actualizat acum ${pret}s (la fiecare 15 s)` : '');
+}
+
 async function incarcaHeatmap() {
-  $('#hm-incarcare').classList.remove('hidden');
+  if (!stare.hm.d) $('#hm-incarcare').classList.remove('hidden');   // la reîmprospătări nu mai acoperim harta
   try {
     const d = await api('/api/heatmap?interval=' + stare.hm.iv);
     stare.hm.d = d;
+    stare.hm.calculatLa = Date.now();
     const s = d.sumar;
     $('#hm-tiles').innerHTML =
       tile('PREȚ BTC (FUTURES)', usd(d.pret_curent, 0), `interval ${d.interval} · ${d.timp.length} lumânări`) +
@@ -701,6 +724,8 @@ async function actualizeazaDate() {
     toast(r.pipeline && r.date_ai ? 'Date actualizate: pipeline Master_Index + istoric AI.' :
       `Actualizare parțială — pipeline: ${r.pipeline ? 'OK' : 'eșuat'}, date AI: ${r.date_ai ? 'OK' : 'eșuat'}.`, !(r.pipeline && r.date_ai));
     reincarcaTot();
+    stare.versiuneDate = null;   // versiunea nouă se preia la următoarea verificare, fără notificare dublă
+    verificaStatus();
   } catch (e) { toast('Actualizarea a eșuat: ' + e.message, true); }
   finally { b.disabled = false; b.textContent = '⟳ ACTUALIZEAZĂ DATE'; }
 }
@@ -708,6 +733,30 @@ async function actualizeazaDate() {
 function reincarcaTot() {
   incarcaPiata(); incarcaCarduriBoti(); incarcaIstoric(); incarcaComparatie();
   if (stare.pagina === 'boti') incarcaBoti();
+}
+
+// ----------------------------------------------------------------- actualizare automată
+// Serverul își reîmprospătează singur datele (pipeline la 60 min, istoric AI zilnic). Pagina verifică
+// versiunea datelor la 30 s și redesenează DOAR când s-a schimbat ceva - fără reîncărcarea paginii.
+async function verificaStatus() {
+  try {
+    const s = await api('/api/status');
+    const led = $('#led-auto'), ruleaza = s.actualizare && s.actualizare.ruleaza;
+    led.className = 'led ' + (!s.auto.activ ? '' : ruleaza ? 'warn puls' : 'ok');
+    $('#auto-ora').textContent = ruleaza ? '…' : (s.master_actualizat || '').slice(11, 16);
+    $('#auto-status').title = !s.auto.activ ? 'Actualizare automată dezactivată (JARVIS_AUTO_UPDATE=0)'
+      : `Actualizare automată: Master_Index la fiecare ${s.auto.interval_pipeline_min} min, istoric AI la fiecare zi nouă.\n` +
+        `Date Master_Index din: ${s.master_actualizat || '—'}\nUltima verificare: ${s.auto.ultima_verificare || '—'}\n` +
+        `Următoarea verificare: ${s.auto.urmatoarea_verificare || '—'}` + (ruleaza ? '\nSe actualizează acum…' : '');
+    if (stare.versiuneDate && stare.versiuneDate !== s.versiune_date) {
+      reincarcaTot();
+      if (stare.pagina === 'heatmap') incarcaHeatmap();
+      toast('Date noi primite automat — panourile au fost actualizate.');
+    }
+    stare.versiuneDate = s.versiune_date;
+  } catch (_) {
+    $('#led-auto').className = 'led bad';
+  }
 }
 
 // ----------------------------------------------------------------- pornire
@@ -731,6 +780,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }));
   $$('#seg-hm-interval button').forEach(b => b.addEventListener('click', () => {
     stare.hm.iv = b.dataset.iv;
+    stare.hm.d = null;   // alt interval -> date noi; arătăm indicatorul de încărcare
     $$('#seg-hm-interval button').forEach(x => x.classList.toggle('activ', x === b));
     incarcaHeatmap();
   }));
@@ -760,5 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try { actualizeazaStatusBoti(await api('/api/boti')); } catch (_) { /* reîncercăm */ }
   }, 4000);
   setInterval(() => { if (stare.pagina === 'boti') incarcaBoti(); }, 20000);
-  setInterval(() => { if (stare.pagina === 'heatmap') incarcaHeatmap(); }, 120000);
+  setInterval(() => { if (stare.pagina === 'heatmap') incarcaHeatmap(); }, 60000);
+  verificaStatus();
+  setInterval(verificaStatus, 30000);
+  setInterval(eticheteLiveHeatmap, 1000);
 });

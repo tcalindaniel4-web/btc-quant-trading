@@ -77,7 +77,13 @@ apoi deschide **http://127.0.0.1:8000** în browser. Trei secțiuni:
 - **BACKTEST** – alegi strategia, data de start și capitalul; primești raportul complet, graficul,
   randamentul pe ani și jurnalul cu motivul fiecărei tranzacții.
 
-Butonul **⟳ ACTUALIZEAZĂ DATE** descarcă date noi (pipeline Master_Index + istoric AI).
+**Actualizare automată:** cât timp serverul rulează, își reîmprospătează singur datele în fundal —
+pipeline-ul Master_Index la fiecare 60 de minute (BGeometrics tot o dată pe zi, prin cache) și istoricul AI
+la fiecare zi nouă închisă (00:00 UTC); dacă un bot rulează, el își actualizează singur datele și serverul
+nu se suprapune. Pagina verifică la 30 s dacă au apărut date noi și redesenează panourile fără reîncărcare
+(indicatorul **AUTO** din bara de sus). Prețul live se actualizează la 15 s, iar heatmap-ul OI se
+recalculează la 60 s. Butonul **⟳ ACTUALIZEAZĂ DATE** forțează o actualizare imediată.
+Dezactivare: `$env:JARVIS_AUTO_UPDATE=0` înainte de pornirea serverului.
 
 ## 🧠 Cele două strategii
 
