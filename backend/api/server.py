@@ -8,6 +8,7 @@ Expune datele existente ale proiectului, FĂRĂ să dubleze logica strategiilor:
   GET  /api/istoric      serii pentru grafice (preț, Master_Index)
   GET  /api/backtest     curbele de capital SDCA v2 vs AI vs Buy & Hold (aceeași perioadă)
   POST /api/backtest/sdca, /api/backtest/ai   backtest la cerere (start, capital), cu jurnal complet
+  GET  /api/heatmap      heatmap estimat al lichidărilor din Open Interest Binance (?interval=15m|1h|4h)
   GET  /api/boti         starea boților live; POST /api/boti/<bot>/porneste|opreste|ciclu|reseteaza
   GET  /api/boti/<bot>/log    ultimele linii din log-ul botului
   POST /api/actualizeaza descarcă date noi (pipeline + date AI), în fundal
@@ -51,6 +52,7 @@ import strategie_ai  # noqa: E402
 import backtest_ai  # noqa: E402
 import bot_live_ai  # noqa: E402
 import control_boti  # noqa: E402
+import heatmap_oi  # noqa: E402
 
 SDCA_STARE = BACKEND_DIR / 'strategii' / 'sdca' / 'bot_state.json'
 START_COMPARATIE = bt_sdca.START_IMPLICIT   # prima zi cu toate datele on-chain
@@ -300,6 +302,17 @@ def actualizeaza():
 @app.get("/api/actualizeaza")
 def actualizeaza_status():
     return _actualizare
+
+
+# ----------------------------------------------------------------------------- heatmap lichidări (Open Interest)
+@app.get("/api/heatmap")
+def heatmap(interval: str = '1h'):
+    if interval not in heatmap_oi.INTERVALE:
+        raise HTTPException(422, f"Interval invalid. Alege: {', '.join(heatmap_oi.INTERVALE)}")
+    try:
+        return curat(cache.ia('heatmap_' + interval, 120, None, lambda: heatmap_oi.calculeaza(interval)))
+    except Exception as e:
+        raise HTTPException(502, f"Nu pot descărca datele Binance Futures: {e}")
 
 
 # ----------------------------------------------------------------------------- boți live (control)

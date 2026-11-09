@@ -20,6 +20,7 @@
     <nav class="tabs" aria-label="Secțiuni">
       <button data-pagina="comanda" class="activ">COMANDĂ</button>
       <button data-pagina="boti">BOȚI LIVE</button>
+      <button data-pagina="heatmap">HEATMAP OI</button>
       <button data-pagina="backtest">BACKTEST</button>
     </nav>
     <div class="dreapta">
@@ -137,6 +138,44 @@
     <section class="pagina" id="p-boti">
       <div class="doua-col" id="panouri-boti"></div>
       <p class="nota">Boții rulează ca procese separate: continuă și dacă închizi pagina. Toate tranzacțiile sunt SIMULATE (paper trading) — niciun ordin real nu este trimis.</p>
+    </section>
+
+    <!-- ================================================================ HEATMAP OI -->
+    <section class="pagina" id="p-heatmap">
+      <div class="panel">
+        <h2>HEATMAP LICHIDĂRI // OPEN INTEREST BINANCE</h2>
+        <div class="antet-grafic">
+          <div class="segment" id="seg-hm-interval">
+            <button data-iv="15m">15M · 5 ZILE</button><button data-iv="1h" class="activ">1H · 29 ZILE</button><button data-iv="4h">4H · 29 ZILE</button>
+          </div>
+          <div class="segment" id="seg-hm-tip">
+            <button data-tip="toate" class="activ">LONG + SHORT</button><button data-tip="long">DOAR LONG</button><button data-tip="short">DOAR SHORT</button>
+          </div>
+        </div>
+        <div class="tiles" id="hm-tiles" style="margin:12px 0"></div>
+        <div class="hm-wrap" id="hm-wrap">
+          <canvas id="hm-canvas" aria-label="Heatmap estimat al lichidărilor pe niveluri de preț și timp"></canvas>
+          <div class="hm-tooltip hidden" id="hm-tooltip"></div>
+          <div class="incarcare hm-incarcare" id="hm-incarcare">Descarc Open Interest de la Binance și calculez modelul</div>
+        </div>
+        <div class="hm-legenda">
+          <span>mai puține lichidări</span><i class="hm-gradient"></i><span id="hm-max">—</span>
+          <span class="hm-linie-pret"><i></i>preț BTC (închidere)</span>
+        </div>
+      </div>
+      <div class="doua-col" style="margin-top:18px">
+        <div class="panel">
+          <h2>NIVELURI MAGNET // UNDE STAU LICHIDĂRILE</h2>
+          <div class="tabel-wrap"><table id="hm-clustere"></table></div>
+          <p class="nota">Peste preț stau lichidările pozițiilor SHORT (prețul urcând acolo le forțează închiderea → cumpărări în cascadă); sub preț, ale pozițiilor LONG (vânzări în cascadă). Piața tinde adesea să „vâneze” zonele mari de lichiditate.</p>
+        </div>
+        <div class="panel">
+          <h2>OPEN INTEREST // BINANCE BTCUSDT</h2>
+          <div class="grafic mic"><canvas id="g-oi" aria-label="Open Interest în timp"></canvas></div>
+          <h3>CUM E CALCULAT</h3>
+          <p class="t2" style="font-size:13.5px;margin:0" id="hm-model"></p>
+        </div>
+      </div>
     </section>
 
     <!-- ================================================================ BACKTEST -->

@@ -80,6 +80,7 @@ function arataPagina(p) {
   $$('.pagina').forEach(s => s.classList.toggle('activa', s.id === 'p-' + p));
   mem.set('jarvis-pagina', p);
   if (p === 'boti') { incarcaBoti(); incarcaLoguri(); }
+  if (p === 'heatmap') { if (stare.hm.d) requestAnimationFrame(deseneazaHeatmap); else incarcaHeatmap(); }
   window.scrollTo({ top: 0 });
 }
 
@@ -437,6 +438,131 @@ async function incarcaLoguri() {
   }
 }
 
+// ----------------------------------------------------------------- HEATMAP LICHIDĂRI (Open Interest)
+const RAMPA_HM = [[0, [8, 19, 29]], [0.15, [11, 51, 70]], [0.35, [11, 95, 122]], [0.6, [10, 165, 194]], [0.82, [98, 220, 239]], [1, [232, 252, 255]]];
+const CUL_PRET_HM = '#ffb547';
+stare.hm = { iv: '1h', tip: 'toate', d: null, geom: null };
+
+function culoareHM(f) {   // rampă secvențială, o singură nuanță (cyan), luminozitate crescătoare
+  for (let i = 1; i < RAMPA_HM.length; i++) {
+    if (f <= RAMPA_HM[i][0]) {
+      const [a, ca] = RAMPA_HM[i - 1], [b, cb] = RAMPA_HM[i], t = (f - a) / (b - a);
+      return ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
+    }
+  }
+  return RAMPA_HM[RAMPA_HM.length - 1][1];
+}
+
+async function incarcaHeatmap() {
+  $('#hm-incarcare').classList.remove('hidden');
+  try {
+    const d = await api('/api/heatmap?interval=' + stare.hm.iv);
+    stare.hm.d = d;
+    const s = d.sumar;
+    $('#hm-tiles').innerHTML =
+      tile('PREȚ BTC (FUTURES)', usd(d.pret_curent, 0), `interval ${d.interval} · ${d.timp.length} lumânări`) +
+      tile('OPEN INTEREST', '$' + nr(d.oi_curent / 1e9, 2) + 'B', `<span class="${semnCls(d.oi_variatie_pct)}">${pct(d.oi_variatie_pct, 1)}</span> în ${d.zile} zile`) +
+      tile('LONG-URI ≤5% SUB PREȚ', compact(s.long_sub_5pct), 'lichidări estimate dacă scade 5%') +
+      tile('SHORT-URI ≤5% PESTE PREȚ', compact(s.short_peste_5pct), 'lichidări estimate dacă urcă 5%');
+    const randuri = [...d.clustere.peste_pret.slice().reverse(), { separator: true }, ...d.clustere.sub_pret];
+    $('#hm-clustere').innerHTML = `<thead><tr><th>ZONĂ</th><th class="n">PREȚ</th><th class="n">DISTANȚĂ</th><th class="n">LICHIDĂRI EST.</th></tr></thead><tbody>` +
+      randuri.map(c => c.separator
+        ? `<tr><td colspan="4" class="num" style="color:${CUL_PRET_HM};text-align:center">── preț curent ${usd(d.pret_curent, 0)} ──</td></tr>`
+        : `<tr><td><span class="eticheta-tip ${c.tip === 'SHORT' ? 'SELL' : 'BUY'}">${c.tip}</span></td><td class="n">${usd(c.pret, 0)}</td>
+           <td class="n ${semnCls(c.distanta_pct)}">${pct(c.distanta_pct, 1)}</td><td class="n">${compact(c.usd)}</td></tr>`).join('') + '</tbody>';
+    const lev = Object.entries(d.model.leviere).map(([k, v]) => `${k}x: ${Math.round(v * 100)}%`).join(', ');
+    $('#hm-model').innerHTML = `Când Open Interest-ul crește, pozițiile noi sunt împărțite în long/short după raportul taker buy/sell și
+      li se calculează prețul de lichidare pentru levierul presupus (${lev}; marjă de mentenanță ${d.model.marja_mentenanta * 100}%).
+      Nivelurile dispar când prețul trece prin ele, iar scăderile de OI le reduc proporțional. <b>Estimare</b>, nu date exacte:
+      levierul real al traderilor nu e public. Sursa: ${esc(d.model.sursa)}.`;
+    deseneaza('g-oi', () => configGrafic(v => '$' + v.toFixed(1) + 'B', { tooltip: { label: c => ' Open Interest: $' + c.parsed.y.toFixed(2) + 'B' } }),
+      { labels: d.timp, datasets: [serie('Open Interest', d.oi, CUL.pret, { fill: { target: 'origin', above: 'rgba(56,189,216,0.06)' } })] });
+    deseneazaHeatmap();
+  } catch (e) {
+    toast('Heatmap indisponibil: ' + e.message, true);
+  } finally { $('#hm-incarcare').classList.add('hidden'); }
+}
+
+function deseneazaHeatmap() {
+  const d = stare.hm.d;
+  if (!d) return;
+  const cnv = $('#hm-canvas'), wrap = $('#hm-wrap'), dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  cnv.width = W * dpr; cnv.height = H * dpr;
+  const ctx = cnv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const m = { st: W < 500 ? 52 : 66, dr: 10, sus: 10, jos: 26 };
+  const pw = W - m.st - m.dr, ph = H - m.sus - m.jos;
+  const T = d.timp.length, N = d.niveluri.length;
+
+  // valorile afișate (după filtru) și scala de culoare (percentila 99 -> evităm ca un singur nivel extrem să "stingă" restul)
+  const val = (t, i) => (stare.hm.tip !== 'short' ? d.long_k[t][i] : 0) + (stare.hm.tip !== 'long' ? d.short_k[t][i] : 0);
+  const toate = [];
+  for (let t = 0; t < T; t++) for (let i = 0; i < N; i++) { const v = val(t, i); if (v > 0) toate.push(v); }
+  toate.sort((a, b) => a - b);
+  const vmax = toate.length ? toate[Math.floor(toate.length * 0.99)] : 1;
+  $('#hm-max').textContent = 'mai multe (≥ ' + compact(vmax * 1000) + ' / nivel)';
+
+  // celulele: desenate într-o imagine T×N, apoi scalate fără netezire
+  const img = new ImageData(T, N);
+  for (let t = 0; t < T; t++) for (let i = 0; i < N; i++) {
+    const v = val(t, i), p = ((N - 1 - i) * T + t) * 4;
+    if (v <= 0) { img.data[p + 3] = 0; continue; }
+    const [r, g, b] = culoareHM(Math.min(1, Math.sqrt(v / vmax)));
+    img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = 255;
+  }
+  const off = document.createElement('canvas'); off.width = T; off.height = N;
+  off.getContext('2d').putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, m.st, m.sus, pw, ph);
+
+  const jos = d.niveluri[0] - d.pas_nivel / 2, sus = d.niveluri[N - 1] + d.pas_nivel / 2;
+  const y = pret => m.sus + ph * (1 - (pret - jos) / (sus - jos));
+  const x = t => m.st + pw * (t + 0.5) / T;
+
+  // axa de preț + grilă
+  ctx.font = '10.5px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
+  const pasPret = [500, 1000, 2000, 2500, 5000, 10000].find(p => (sus - jos) / p <= 9) || 20000;
+  for (let p = Math.ceil(jos / pasPret) * pasPret; p <= sus; p += pasPret) {
+    ctx.strokeStyle = 'rgba(0,225,255,0.06)'; ctx.beginPath(); ctx.moveTo(m.st, y(p)); ctx.lineTo(m.st + pw, y(p)); ctx.stroke();
+    ctx.fillStyle = CUL.muted; ctx.fillText('$' + nr(p / 1000, pasPret < 1000 ? 1 : 0) + 'k', m.st - 6, y(p));
+  }
+  // axa de timp
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const nrEt = W < 500 ? 3 : 6;
+  for (let k = 0; k < nrEt; k++) {
+    const t = Math.round((T - 1) * (k + 0.5) / nrEt);
+    ctx.fillStyle = CUL.muted; ctx.fillText(d.timp[t].slice(5, stare.hm.iv === '15m' ? 16 : 10), x(t), m.sus + ph + 7);
+  }
+  // linia prețului + prețul curent
+  ctx.strokeStyle = CUL_PRET_HM; ctx.lineWidth = 1.5; ctx.beginPath();
+  d.pret.close.forEach((p, t) => t ? ctx.lineTo(x(t), y(p)) : ctx.moveTo(x(t), y(p)));
+  ctx.stroke();
+  const yc = y(d.pret_curent);
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,181,71,0.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(m.st, yc); ctx.lineTo(m.st + pw, yc); ctx.stroke(); ctx.setLineDash([]);
+
+  stare.hm.geom = { m, pw, ph, T, N, jos, sus };
+}
+
+function hoverHeatmap(ev) {
+  const g = stare.hm.geom, d = stare.hm.d, tip = $('#hm-tooltip');
+  if (!g || !d) return;
+  const r = $('#hm-canvas').getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  if (mx < g.m.st || mx > g.m.st + g.pw || my < g.m.sus || my > g.m.sus + g.ph) { tip.classList.add('hidden'); return; }
+  const t = Math.min(g.T - 1, Math.floor((mx - g.m.st) / g.pw * g.T));
+  const i = Math.min(g.N - 1, Math.floor((1 - (my - g.m.sus) / g.ph) * g.N));
+  const lo = d.niveluri[i] - d.pas_nivel / 2, hi = d.niveluri[i] + d.pas_nivel / 2;
+  tip.innerHTML = `<b>${esc(d.timp[t])} UTC</b><br>nivel ${usd(lo, 0)} – ${usd(hi, 0)}<br>
+    lichidări LONG est.: <b>${compact(d.long_k[t][i] * 1000)}</b><br>lichidări SHORT est.: <b>${compact(d.short_k[t][i] * 1000)}</b><br>
+    preț închidere: ${usd(d.pret.close[t], 0)}`;
+  tip.classList.remove('hidden');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(mx + 14, r.width - w - 6) + 'px';
+  tip.style.top = Math.max(6, Math.min(my - h / 2, r.height - h - 6)) + 'px';
+}
+
 // ----------------------------------------------------------------- BACKTEST
 async function ruleazaBacktest(ev) {
   ev.preventDefault();
@@ -603,6 +729,20 @@ document.addEventListener('DOMContentLoaded', () => {
     $$('#seg-istoric button').forEach(x => x.classList.toggle('activ', x === b));
     incarcaIstoric();
   }));
+  $$('#seg-hm-interval button').forEach(b => b.addEventListener('click', () => {
+    stare.hm.iv = b.dataset.iv;
+    $$('#seg-hm-interval button').forEach(x => x.classList.toggle('activ', x === b));
+    incarcaHeatmap();
+  }));
+  $$('#seg-hm-tip button').forEach(b => b.addEventListener('click', () => {
+    stare.hm.tip = b.dataset.tip;
+    $$('#seg-hm-tip button').forEach(x => x.classList.toggle('activ', x === b));
+    deseneazaHeatmap();
+  }));
+  $('#hm-canvas').addEventListener('mousemove', hoverHeatmap);
+  $('#hm-canvas').addEventListener('mouseleave', () => $('#hm-tooltip').classList.add('hidden'));
+  let tRedim;
+  window.addEventListener('resize', () => { clearTimeout(tRedim); tRedim = setTimeout(() => { if (stare.pagina === 'heatmap') deseneazaHeatmap(); }, 150); });
   $('#form-backtest').addEventListener('submit', ruleazaBacktest);
   $('#bt-strategie').addEventListener('change', e => { $('#bt-start').value = e.target.value === 'sdca' ? '2023-02-15' : '2018-08-17'; });
   $('#form-chat').addEventListener('submit', trimiteIntrebare);
@@ -620,4 +760,5 @@ document.addEventListener('DOMContentLoaded', () => {
     try { actualizeazaStatusBoti(await api('/api/boti')); } catch (_) { /* reîncercăm */ }
   }, 4000);
   setInterval(() => { if (stare.pagina === 'boti') incarcaBoti(); }, 20000);
+  setInterval(() => { if (stare.pagina === 'heatmap') incarcaHeatmap(); }, 120000);
 });

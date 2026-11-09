@@ -15,7 +15,8 @@ licenta crypto ai/
 ├── backend/
 │   ├── api/                      ← serverul platformei web J.A.R.V.I.S. (FastAPI)
 │   │   ├── server.py                 API: piață, boți, backtest, actualizare date, chat (etapa finală)
-│   │   └── control_boti.py           pornește / oprește boții live ca procese separate
+│   │   ├── control_boti.py           pornește / oprește boții live ca procese separate
+│   │   └── heatmap_oi.py             heatmap estimat al lichidărilor din Open Interest Binance
 │   ├── logs/                     ← log-urile boților porniți din platformă (nu intră în git)
 │   ├── data/                     ← date generate automat de pipeline (nu se editează manual)
 │   │   ├── btc_live_data.csv         preț + VWAP, MACD, RSI
@@ -69,6 +70,10 @@ apoi deschide **http://127.0.0.1:8000** în browser. Trei secțiuni:
 - **BOȚI LIVE** – pornește / oprește boții, rulează un ciclu la cerere, resetează portofoliul (arhivare),
   vezi log-ul live, portofoliul, semnalul curent și ultimele tranzacții. Boții rulează ca procese separate
   și continuă și după ce închizi pagina.
+- **HEATMAP OI** – heatmap estimat al lichidărilor (preț × timp) construit din Open Interest-ul Binance
+  Futures (15m / 1h / 4h, ~30 zile): unde s-ar declanșa lichidările long/short, nivelurile „magnet” și
+  evoluția Open Interest. Model transparent în `backend/api/heatmap_oi.py` (levier presupus 10x–100x,
+  împărțire long/short după taker buy/sell) — o estimare, nu date exacte.
 - **BACKTEST** – alegi strategia, data de start și capitalul; primești raportul complet, graficul,
   randamentul pe ani și jurnalul cu motivul fiecărei tranzacții.
 

@@ -303,6 +303,19 @@ tr:hover td { background: rgba(0,225,255,.03); }
 .incarcare::after { content: '▍'; animation: clipeste 1s steps(1) infinite; color: var(--accent); }
 @keyframes clipeste { 50% { opacity: 0; } }
 
+/* ------------------------------------------------------------- heatmap OI */
+.hm-wrap { position: relative; height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-solid); }
+.hm-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.hm-incarcare { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8,19,29,.85); }
+.hm-tooltip { position: absolute; pointer-events: none; z-index: 5; background: rgba(3,10,16,0.95); border: 1px solid rgba(0,225,255,0.4);
+  border-radius: var(--radius); padding: 8px 10px; font-family: var(--font-num); font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.hm-tooltip b { color: var(--text); font-weight: 600; }
+.hm-legenda { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+.hm-gradient { display: inline-block; width: 180px; height: 10px; border-radius: 3px; border: 1px solid var(--line);
+  background: linear-gradient(90deg, #08131d 0%, #0b3346 15%, #0b5f7a 35%, #0aa5c2 60%, #62dcef 82%, #e8fcff 100%); }
+.hm-linie-pret { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.hm-linie-pret i { width: 18px; height: 2px; background: #ffb547; display: inline-block; }
+
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 1180px) {
   .grid-comanda { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -323,6 +336,8 @@ tr:hover td { background: rgba(0,225,255,.03); }
   .rand-controale .camp, .rand-controale .camp input, .rand-controale .camp select { width: 100%; }
   .rand-controale .btn { flex: 1 1 auto; }
   .voturi { grid-template-columns: repeat(4, 1fr); }
+  .hm-wrap { height: 400px; }
+  .hm-linie-pret { margin-left: 0; }
   .segment { flex-wrap: wrap; max-width: 100%; }
   .segment button { flex: 1 1 auto; }
   .comp { grid-template-columns: 80px 1fr 48px; }
