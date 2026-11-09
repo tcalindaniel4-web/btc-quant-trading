@@ -538,6 +538,26 @@ app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 
 if __name__ == "__main__":
+    import socket
+    import webbrowser
     import uvicorn
-    print("J.A.R.V.I.S. pornește pe http://127.0.0.1:8000  (Ctrl+C pentru oprire)")
+
+    URL = "http://127.0.0.1:8000"
+    deschide = '--deschide' in sys.argv     # deschide singur browserul (folosit de porneste_jarvis.bat)
+
+    # Dacă platforma rulează deja (altă fereastră), nu pornim a doua oară: doar deschidem pagina.
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        if s.connect_ex(('127.0.0.1', 8000)) == 0:
+            print(f"J.A.R.V.I.S. rulează deja pe {URL}")
+            if deschide:
+                webbrowser.open(URL)
+            sys.exit(0)
+
+    print("=" * 64)
+    print(f" J.A.R.V.I.S. pornește pe {URL}")
+    print(" Lasă fereastra deschisă cât folosești platforma. Ctrl+C = oprire.")
+    print("=" * 64)
+    if deschide:
+        threading.Timer(2.5, lambda: webbrowser.open(URL)).start()
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")

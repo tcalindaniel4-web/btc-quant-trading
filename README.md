@@ -59,10 +59,16 @@ licenta crypto ai/
 
 ## 🖥️ Platforma J.A.R.V.I.S.
 
+**Cel mai simplu:** dublu-click pe **`porneste_jarvis.bat`** (în folderul proiectului). Se deschide o fereastră
+cu serverul și, după câteva secunde, platforma în browser. **Platforma funcționează cât timp fereastra rămâne
+deschisă**; închiderea ei oprește serverul (pagina va da eroare de conexiune până la o nouă pornire).
+Dacă serverul rulează deja, scriptul doar deschide pagina.
+
+Alternativ, din terminal:
 ```
 venv\Scripts\python.exe backend\api\server.py
 ```
-apoi deschide **http://127.0.0.1:8000** în browser. Trei secțiuni:
+apoi deschide **http://127.0.0.1:8000** în browser. Secțiuni:
 
 - **COMANDĂ** – preț live, Master_Index și componentele lui, starea celor doi boți, istoricul pieței și
   comparația SDCA v2 / AI Hedge Fund / Buy & Hold pe aceeași perioadă. Consola asistentului e pregătită
