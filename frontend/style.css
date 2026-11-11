@@ -22,8 +22,10 @@
   --warn: #f0b429;
   --bad: #ff5a6e;
   --radius: 4px;
-  --font-hud: 'Orbitron', 'Segoe UI', sans-serif;
-  --font-ui: 'Rajdhani', 'Segoe UI', sans-serif;
+  --font-hud: 'Chakra Petch', 'Segoe UI', sans-serif;   /* o singură familie: titluri (600) și text (400/500) */
+  --font-ui: 'Chakra Petch', 'Segoe UI', sans-serif;
+  --amber: #ffb547;                                      /* al doilea accent: valori negative pe reactor, prețul pe heatmap */
+  --tesit: 14px;                                         /* colțul teșit al panourilor */
   --font-num: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 }
 
@@ -40,16 +42,14 @@ body {
   line-height: 1.4;
   overflow-x: hidden;
 }
-body::before {               /* grilă HUD discretă */
+body::before {               /* grilă HUD: vizibilă în jurul reactorului, se stinge spre margini */
   content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background-image:
-    linear-gradient(rgba(0, 225, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 225, 255, 0.035) 1px, transparent 1px);
-  background-size: 44px 44px;
-}
-.scanlines {
-  position: fixed; inset: 0; pointer-events: none; z-index: 50;
-  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 3px);
+    linear-gradient(rgba(0, 225, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 225, 255, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 32%, #000 0%, transparent 100%);
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 32%, #000 0%, transparent 100%);
 }
 button, input, select { font-family: inherit; }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
@@ -76,16 +76,18 @@ button, input, select { font-family: inherit; }
   padding: 10px 22px; border-bottom: 1px solid var(--line);
   background: rgba(3, 8, 14, 0.88); backdrop-filter: blur(6px);
 }
-.logo { display: flex; flex-direction: column; line-height: 1.05; }
+.logo { display: flex; align-items: center; gap: 10px; line-height: 1.1; }
+.logo img { display: block; border-radius: 9px; }
+.logo > div { display: flex; flex-direction: column; }
 .logo b {
-  font-family: var(--font-hud); font-weight: 800; letter-spacing: .32em; font-size: 20px;
+  font-family: var(--font-hud); font-weight: 700; letter-spacing: .3em; font-size: 19px;
   color: var(--accent); text-shadow: 0 0 12px rgba(0, 225, 255, .55);
 }
-.logo span { font-family: var(--font-hud); font-size: 9.5px; letter-spacing: .38em; color: var(--text-2); }
+.logo span { font-size: 11.5px; letter-spacing: .12em; color: var(--text-2); }
 nav.tabs { display: flex; gap: 4px; margin-left: 12px; }
 nav.tabs button {
   background: transparent; color: var(--text-2); border: 1px solid transparent;
-  font-family: var(--font-hud); font-size: 11px; letter-spacing: .2em; padding: 8px 14px; cursor: pointer;
+  font-family: var(--font-hud); font-weight: 600; font-size: 12.5px; letter-spacing: .12em; padding: 8px 14px; cursor: pointer;
   border-radius: var(--radius);
 }
 nav.tabs button:hover { color: var(--text); border-color: var(--line); }
@@ -104,7 +106,7 @@ nav.tabs button.activ { color: var(--accent); border-color: var(--line-strong); 
 /* ------------------------------------------------------------- butoane & input */
 .btn {
   background: rgba(0, 225, 255, 0.06); color: var(--accent); border: 1px solid var(--line-strong);
-  font-family: var(--font-hud); font-size: 10.5px; letter-spacing: .18em; padding: 9px 14px; cursor: pointer;
+  font-family: var(--font-hud); font-weight: 600; font-size: 12px; letter-spacing: .1em; padding: 9px 14px; cursor: pointer;
   border-radius: var(--radius); transition: background .2s, box-shadow .2s; white-space: nowrap;
 }
 .btn:hover:not(:disabled) { background: rgba(0, 225, 255, 0.16); box-shadow: 0 0 14px rgba(0, 225, 255, .25); }
@@ -136,23 +138,30 @@ main { position: relative; z-index: 1; padding: 18px 22px 40px; max-width: 1680p
 .doua-col { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* ------------------------------------------------------------- panouri HUD */
+/* Panou cu două colțuri teșite (dreapta-sus, stânga-jos). Forma e desenată de două straturi decupate:
+   ::before = marginea (gradient: luminoasă în colțurile drepte, stinsă pe laturi), ::after = fundalul.
+   Conținutul nu e decupat, deci tooltip-urile și umbrele rămân întregi. */
 .panel {
-  position: relative; background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 16px 18px; min-width: 0;
-  box-shadow: inset 0 0 30px rgba(0, 225, 255, 0.03);
+  position: relative; isolation: isolate; padding: 18px 20px; min-width: 0;
 }
-.panel::before, .panel::after {   /* colțuri tip "bracket" */
-  content: ''; position: absolute; width: 14px; height: 14px; pointer-events: none;
-  border-color: var(--accent); border-style: solid; opacity: .8;
+.panel::before, .panel::after {
+  content: ''; position: absolute; z-index: -1; pointer-events: none;
+  clip-path: polygon(0 0, calc(100% - var(--tesit)) 0, 100% var(--tesit), 100% 100%, var(--tesit) 100%, 0 calc(100% - var(--tesit)));
 }
-.panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
-.panel::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+.panel::before { inset: 0;
+  background: linear-gradient(135deg, rgba(0, 225, 255, .7), rgba(0, 225, 255, .14) 22%, rgba(0, 225, 255, .14) 78%, rgba(0, 225, 255, .5)); }
+.panel::after { inset: 1px;
+  background: linear-gradient(180deg, #081826, #06111a 140px); }
 .panel h2 {
-  margin: 0 0 14px; font-family: var(--font-hud); font-size: 11.5px; font-weight: 600;
-  letter-spacing: .26em; color: var(--accent); display: flex; align-items: center; gap: 10px;
+  margin: 0 0 16px; font-family: var(--font-hud); font-size: 13px; font-weight: 600;
+  letter-spacing: .14em; color: var(--accent); display: flex; align-items: center; gap: 10px;
+}
+.panel h2::before {            /* marcaj teșit, aceeași formă ca panoul */
+  content: ''; flex: none; width: 9px; height: 9px; background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 55% 100%, 0 100%);
 }
 .panel h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line-strong), transparent); }
-.panel h3 { margin: 16px 0 8px; font-family: var(--font-hud); font-size: 10px; letter-spacing: .22em; color: var(--text-2); font-weight: 500; }
+.panel h3 { margin: 18px 0 8px; font-family: var(--font-hud); font-size: 11.5px; letter-spacing: .1em; color: var(--text-2); font-weight: 500; }
 
 /* ------------------------------------------------------------- piață */
 .pret-mare { font-family: var(--font-num); font-size: 34px; font-weight: 600; letter-spacing: -.01em;
@@ -188,21 +197,44 @@ main { position: relative; z-index: 1; padding: 18px 22px 40px; max-width: 1680p
 
 /* ------------------------------------------------------------- nucleu (arc reactor) */
 .nucleu { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.reactor { position: relative; width: min(330px, 78vw); aspect-ratio: 1; }
-.reactor svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.reactor .rot-lent { animation: roteste 38s linear infinite; transform-origin: 50% 50%; }
-.reactor .rot-invers { animation: roteste 22s linear infinite reverse; transform-origin: 50% 50%; }
-.reactor .rot-rapid { animation: roteste 9s linear infinite; transform-origin: 50% 50%; }
-.reactor .puls { animation: puls 3.2s ease-in-out infinite; transform-origin: 50% 50%; }
+.reactor { position: relative; width: min(430px, 92vw); aspect-ratio: 1; }
+.reactor svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.reactor .rot-lent { animation: roteste 90s linear infinite; transform-origin: 100px 100px; }
+.reactor .rot-invers { animation: roteste 40s linear infinite reverse; transform-origin: 100px 100px; }
+.reactor .puls { animation: puls 3.6s ease-in-out infinite; transform-origin: 100px 100px; }
 .reactor.vorbeste .puls { animation-duration: .7s; }
 @keyframes roteste { to { transform: rotate(360deg); } }
-@keyframes puls { 0%,100% { opacity: .55; transform: scale(.97); } 50% { opacity: 1; transform: scale(1.02); } }
+@keyframes puls { 0%,100% { opacity: .5; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.03); } }
+/* piesele desenate din date (app.js: deseneazaReactor) */
+.reactor .r-pista { fill: none; stroke: rgba(0, 225, 255, .13); }
+.reactor .r-comp { fill: none; stroke-linecap: butt; }
+.reactor .r-comp.poz { stroke: var(--accent); filter: drop-shadow(0 0 2px rgba(0, 225, 255, .8)); }
+.reactor .r-comp.neg { stroke: var(--amber); filter: drop-shadow(0 0 2px rgba(255, 181, 71, .7)); }
+.reactor .r-zona { fill: none; }
+.reactor .r-zona.acc { stroke: rgba(52, 209, 126, .6); }
+.reactor .r-zona.neu { stroke: rgba(146, 184, 199, .28); }
+.reactor .r-zona.euf { stroke: rgba(255, 90, 110, .6); }
+.reactor .r-ac { stroke: #eafcff; stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(0, 225, 255, .95)); }
+.reactor .r-gradatie { stroke: rgba(146, 184, 199, .55); stroke-width: .8; }
+.reactor text { font-family: var(--font-hud); fill: var(--text-2); text-anchor: middle; }
+.reactor .r-cifra { font-family: var(--font-num); font-size: 5.6px; fill: var(--muted); }
+.reactor .r-nume { font-size: 6.6px; font-weight: 600; letter-spacing: .06em; }
+.reactor .r-val { font-family: var(--font-num); font-size: 6.2px; fill: var(--text); }
+.reactor .r-zona-nume { font-size: 5.4px; letter-spacing: .08em; }
+/* singurul moment de mișcare al paginii: la încărcare, arcele "pornesc" o singură dată */
+.reactor .r-anim { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.1s cubic-bezier(.2, .7, .2, 1); }
+.reactor.pornit .r-anim { stroke-dashoffset: 0; }
+.reactor .r-ac, .reactor text { opacity: 0; transition: opacity .5s ease .7s; }
+.reactor.pornit .r-ac, .reactor.pornit text { opacity: 1; }
 .reactor-centru { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; pointer-events: none; }
-.reactor-centru .eticheta { font-family: var(--font-hud); font-size: 9.5px; letter-spacing: .3em; color: var(--text-2); }
-.reactor-centru .valoare { font-family: var(--font-num); font-size: 38px; font-weight: 600; color: var(--text);
-  text-shadow: 0 0 20px rgba(0, 225, 255, .55); margin: 2px 0; }
-.semnal { font-family: var(--font-hud); font-size: 11px; letter-spacing: .25em; padding: 3px 10px; border-radius: 3px; border: 1px solid; }
+.reactor-centru .eticheta { font-family: var(--font-hud); font-size: 12px; letter-spacing: .08em; color: var(--text-2); }
+.reactor-centru .valoare { font-family: var(--font-num); font-size: clamp(30px, 9vw, 42px); font-weight: 600; color: var(--text);
+  text-shadow: 0 0 22px rgba(0, 225, 255, .6); margin: 0 0 4px; line-height: 1.1; }
+.semnal { font-family: var(--font-hud); font-weight: 600; font-size: 12px; letter-spacing: .16em; padding: 2px 10px; border-radius: 2px; border: 1px solid; }
+.reactor-legenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin: -4px 0 0; font-size: 12.5px; color: var(--text-2); }
+.reactor-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.reactor-legenda i { width: 12px; height: 4px; display: inline-block; }
 .semnal.BUY { color: var(--good); border-color: rgba(52,209,126,.5); }
 .semnal.SELL { color: var(--bad); border-color: rgba(255,90,110,.5); }
 .semnal.HOLD { color: var(--text-2); border-color: var(--line-strong); }
@@ -325,6 +357,53 @@ tr:hover td { background: rgba(0,225,255,.03); }
 .hm-linie-pret { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .hm-linie-pret i { width: 18px; height: 2px; background: #ffb547; display: inline-block; }
 
+/* ------------------------------------------------------------- știri */
+.cotatii { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.cotatie { position: relative; isolation: isolate; padding: 14px 18px; }
+.cotatie::before, .cotatie::after { content: ''; position: absolute; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.cotatie::before { inset: 0; background: linear-gradient(135deg, var(--cat), rgba(0, 225, 255, .12) 30%, rgba(0, 225, 255, .12)); }
+.cotatie::after { inset: 1px; background: #071621; }
+.cotatie .nume { font-size: 13px; color: var(--text-2); }
+.cotatie .pret { font-family: var(--font-num); font-size: 24px; font-weight: 600; margin-top: 2px; }
+.cotatie .det { font-family: var(--font-num); font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cat-btc { --cat: var(--amber); } .cat-aur { --cat: #e2c35b; } .cat-spx { --cat: var(--s-bh); } .cat-piete { --cat: var(--text-2); }
+
+.stiri { list-style: none; margin: 12px 0 0; padding: 0; }
+.stire { display: grid; grid-template-columns: 74px 1fr; gap: 4px 14px; padding: 11px 0; border-top: 1px solid var(--line); }
+.stire:first-child { border-top: 0; }
+.stire time { font-family: var(--font-num); font-size: 12px; color: var(--muted); padding-top: 3px; white-space: nowrap; }
+.stire a { color: var(--text); text-decoration: none; font-size: 15.5px; line-height: 1.35; font-weight: 500; }
+.stire a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.stire a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.stire .meta { grid-column: 2; display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: var(--text-2); }
+.stire .tag { font-size: 11.5px; font-weight: 600; padding: 0 7px; border: 1px solid var(--cat); color: var(--cat); border-radius: 2px; }
+
+/* bara „ultima știre” de pe pagina COMANDĂ */
+.ultima-stire { position: relative; isolation: isolate; display: flex; align-items: center; gap: 14px;
+  padding: 9px 14px; margin-bottom: 18px; min-width: 0; }
+.ultima-stire::before, .ultima-stire::after { content: ''; position: absolute; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.ultima-stire::before { inset: 0; background: linear-gradient(90deg, rgba(0, 225, 255, .55), rgba(0, 225, 255, .12) 30%, rgba(0, 225, 255, .12)); }
+.ultima-stire::after { inset: 1px; background: #071621; }
+.us-eticheta { flex: none; display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.us-continut { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.us-continut a { color: var(--text); text-decoration: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.us-continut a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.us-continut a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.us-continut time, .us-continut .sursa { flex: none; font-size: 12px; color: var(--muted); }
+.us-continut time { font-family: var(--font-num); }
+.us-continut .tag { flex: none; font-size: 11px; font-weight: 600; padding: 0 6px; border: 1px solid var(--cat); color: var(--cat); border-radius: 2px; }
+.ultima-stire .btn { flex: none; }
+.ultima-stire.noua .us-continut a { animation: stire-noua 1.6s ease; }
+@keyframes stire-noua { 0% { color: var(--accent); text-shadow: 0 0 12px rgba(0, 225, 255, .6); } 100% { color: var(--text); text-shadow: none; } }
+
+/* ------------------------------------------------------------- aplicație pe ecranul principal (iPhone) */
+/* Pe tot ecranul, conținutul nu trebuie să intre sub ceas / notch / bara de jos. */
+.topbar { padding-top: calc(10px + env(safe-area-inset-top)); padding-left: calc(22px + env(safe-area-inset-left)); padding-right: calc(22px + env(safe-area-inset-right)); }
+main { padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+#toast { bottom: calc(18px + env(safe-area-inset-bottom)); }
+
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 1180px) {
   .grid-comanda { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -332,7 +411,8 @@ tr:hover td { background: rgba(0,225,255,.03); }
 }
 @media (max-width: 760px) {
   main { padding: 14px 16px 32px; }
-  .topbar { position: static; padding: 10px 16px; gap: 10px; }
+  .topbar { position: static; gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left)); }
   nav.tabs { margin-left: 0; width: 100%; order: 3; }
   nav.tabs button { flex: 1; padding: 8px 4px; letter-spacing: .1em; }
   .surse { display: none; }
@@ -346,6 +426,19 @@ tr:hover td { background: rgba(0,225,255,.03); }
   .rand-controale .btn { flex: 1 1 auto; }
   .voturi { grid-template-columns: repeat(4, 1fr); }
   .hm-wrap { height: 400px; }
+  .ultima-stire { flex-wrap: wrap; gap: 6px 10px; }
+  .us-continut { order: 3; flex-basis: 100%; flex-wrap: wrap; gap: 4px 8px; }
+  .us-continut a { white-space: normal; flex-basis: 100%; order: -1; }
+  .ultima-stire .btn { margin-left: auto; }
+  .cotatii { gap: 8px; }
+  .cotatie { padding: 10px 10px 10px 12px; }
+  .cotatie .nume { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cotatie .pret { font-size: 16px; }
+  .cotatie .det-lung { display: none; }
+  nav.tabs button { font-size: 11px; letter-spacing: .04em; padding: 8px 2px; }
+  .stire { grid-template-columns: minmax(0, 1fr); }
+  .stire time { padding: 0; }
+  .stire .meta { grid-column: 1; }
   .hm-linie-pret { margin-left: 0; }
   .segment { flex-wrap: wrap; max-width: 100%; }
   .segment button { flex: 1 1 auto; }

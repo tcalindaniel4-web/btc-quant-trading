@@ -16,7 +16,8 @@ licenta crypto ai/
 │   ├── api/                      ← serverul platformei web J.A.R.V.I.S. (FastAPI)
 │   │   ├── server.py                 API: piață, boți, backtest, actualizare date, chat (etapa finală)
 │   │   ├── control_boti.py           pornește / oprește boții live ca procese separate
-│   │   └── heatmap_oi.py             heatmap estimat al lichidărilor din Open Interest Binance
+│   │   ├── heatmap_oi.py             heatmap estimat al lichidărilor din Open Interest Binance
+│   │   └── stiri.py                  știri de piață (RSS public) + cotații BTC, aur, S&P 500
 │   ├── logs/                     ← log-urile boților porniți din platformă (nu intră în git)
 │   ├── data/                     ← date generate automat de pipeline (nu se editează manual)
 │   │   ├── btc_live_data.csv         preț + VWAP, MACD, RSI
@@ -80,6 +81,9 @@ apoi deschide **http://127.0.0.1:8000** în browser. Secțiuni:
   Futures (15m / 1h / 4h, ~30 zile): unde s-ar declanșa lichidările long/short, nivelurile „magnet” și
   evoluția Open Interest. Model transparent în `backend/api/heatmap_oi.py` (levier presupus 10x–100x,
   împărțire long/short după taker buy/sell) — o estimare, nu date exacte.
+- **ȘTIRI** – ultimele titluri despre Bitcoin, aur, S&P 500 și piețe (Google News, Yahoo Finance, CoinDesk,
+  Cointelegraph, CNBC – fluxuri RSS publice, fără cheie), filtrabile pe categorii, plus cotațiile celor trei
+  instrumente. Reîmprospătare la 5 minute; linkurile duc la articolul original.
 - **BACKTEST** – alegi strategia, data de start și capitalul; primești raportul complet, graficul,
   randamentul pe ani și jurnalul cu motivul fiecărei tranzacții.
 
@@ -108,10 +112,12 @@ Backtest 2023-02-15 → 2026-11 (comisioane incluse, **date on-chain întârziat
 
 | | SDCA v2 | SDCA v1 | Buy & Hold |
 |---|---|---|---|
-| Valoare finală | **$33.557 (+236%)** | $19.110 (+91%) | $31.029 (+210%) |
+| Valoare finală | **$39.685 (+297%)** | $19.110 (+91%) | $29.976 (+200%) |
 | Drawdown maxim | **-28%** | -17% | -53% |
-| 28 porniri lunare: medie / mediană | **+69% / +81%** | +37% / +53% | +64% / +27% |
+| 28 porniri lunare: medie / mediană | **+88% / +86%** | +34% / +53% | +58% / +22% |
 | 28 porniri lunare: drawdown mediu | -34% | -26% | -53% |
+
+(cifre la 2026-11-10; se schimbă odată cu prețul — rulează `backtest_sdca_long.py --robustete` pentru valorile curente)
 
 Ce s-a schimbat (detalii în `strategie_sdca.py`):
 1. **Date realiste (fără lookahead):** BGeometrics gratuit ascunde ultimele 7 zile de MVRV/SOPR. Backtest-ul
@@ -120,8 +126,15 @@ Ce s-a schimbat (detalii în `strategie_sdca.py`):
 3. **Confirmare on-chain pentru top** – vânzarea de 70% cere și MVRV în treimea de sus a benzii.
 4. **Reset față de vârful real al ciclului** – v1 măsura -40% față de prețul vândut și rămânea pe cash pentru totdeauna.
 5. **Fix:** alerta de euforie se șterge la un ciclu nou; **o singură logică** pentru bot și backtest; Open Interest scos din index.
+6. **Răscumpărare la reducere** – un semnal de top nu poate ști dacă e vârful ciclului (martie 2024, $65k: cea mai
+   mare supraevaluare MVRV a ciclului, dar prețul a ajuns apoi la $126k). După vânzare, dacă piața capitulează
+   (Master_Index < -0.5) la un preț cu ≥10% sub cel de vânzare, botul cumpără înapoi mai ieftin. Media pe 28 de
+   porniri: +88% față de +64% fără regulă, același drawdown; rezultat identic pentru praguri între 5% și 15%;
+   în bear market-ul 2021–2022 (test cu MVRV istoric CoinMetrics) nu a înrăutățit rezultatul.
 
-Respinsă după testul pe date realiste: „ieșirea din fals top” (fără întârziere părea +205%, cu datele reale: -3% în medie).
+Respinse după teste: „ieșirea din fals top” (fără întârziere părea +205%, cu datele reale: -3% în medie);
+vânzarea în tranșe mai mici cu păstrarea restului (mai slabă decât 70% + moonbag); trailing stop sau
+„următorul semnal” pentru moonbag (media crește, mediana scade, câștigă doar în 13/28 porniri).
 **Limită:** datele on-chain gratuite acoperă un singur ciclu (2022-11 →), iar regulile au fost alese pe aceleași
 date — rezultatele sunt indicative, nu o garanție.
 

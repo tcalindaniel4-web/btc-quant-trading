@@ -34,7 +34,7 @@ warnings.filterwarnings('ignore')
 START_IMPLICIT = '2023-02-15'
 COST = 0.0015  # 0.10% comision + 0.05% slippage
 
-TIPURI = ['FRONT-LOAD MASIV', 'AGRESIV DCA', 'MICRO DCA', 'S/R BOUNCE', 'MACRO TOP 70%',
+TIPURI = ['RĂSCUMPĂRARE', 'FRONT-LOAD MASIV', 'AGRESIV DCA', 'MICRO DCA', 'S/R BOUNCE', 'MACRO TOP 70%',
           'MOONBAG FOMO', 'MOONBAG PANIC', 'DIAMOND HANDS ACTIVAT', 'DIAMOND HANDS DEZACTIVAT',
           'FALS TOP', 'BEAR MARKET RESET']
 
@@ -67,6 +67,10 @@ def explicatie(tip, z, zi, st_inainte):
                        else f"prețul a coborât sub media pe 50 de zile (${z['SMA_50']:,.0f})")
         return (f"alerta de euforie era deja armată (Master_Index ≥ 1.5 cu MVRV ajustat ≥ {PRAG_MVRV_TOP:.2f}), "
                 f"iar acum trendul s-a epuizat: {declansator} → vindem 70% (MVRV azi {z['Adjusted_MVRV']:.2f})")
+    if tip == 'RĂSCUMPĂRARE':
+        v = st_inainte['pret_vanzare_70']
+        return (f"după vânzarea de top de la ${v:,.0f}, piața capitulează ({Z} < -0.5) la un preț cu "
+                f"{abs(z['Close'] / v - 1):.0%} mai mic → cumpărăm înapoi mai ieftin cu 40% din cash")
     return {
         'FRONT-LOAD MASIV': f"{Z} < -0.5 (piață subevaluată) și e prima intrare a ciclului → investim 70% din cash",
         'AGRESIV DCA': f"{Z} < -0.5 (subevaluat) și {_de_ce_acum(st_inainte, z, 7, 0.10)} → 40% din cash",

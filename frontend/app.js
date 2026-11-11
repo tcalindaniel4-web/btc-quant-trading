@@ -81,6 +81,7 @@ function arataPagina(p) {
   mem.set('jarvis-pagina', p);
   if (p === 'boti') { incarcaBoti(); incarcaLoguri(); }
   if (p === 'heatmap') { if (stare.hm.d) requestAnimationFrame(deseneazaHeatmap); else incarcaHeatmap(); }
+  if (p === 'stiri' && Date.now() - stare.stiri.incarcatLa > 120000) incarcaStiri();
   window.scrollTo({ top: 0 });
 }
 
@@ -254,6 +255,50 @@ function pazaWS() {   // dacă fluxul tace (rețea blocată, tab adormit), îl r
   if (ws && ws.readyState === WebSocket.OPEN && Date.now() - stare.live.ultimMesaj > 15000) ws.close();
 }
 
+// ----------------------------------------------------------------- REACTOR (instrumentul central)
+// Cadran de 270°: Master_Index de la -2 (stânga-jos) la +2 (dreapta-jos), cu zonele acumulare / neutru / euforie
+// și un ac indicator. Inelul exterior: cele 6 componente ale indexului; lungimea arcului = mărimea contribuției,
+// culoarea + semnul din etichetă = direcția (cyan pozitiv, chihlimbar negativ).
+const R_NUME = { Z_VWAP: 'VWAP', Z_MACD: 'MACD', Z_RSI: 'RSI', Z_Funding_Rate: 'FUNDING', Adjusted_MVRV: 'MVRV', Z_SOPR: 'SOPR' };
+
+function deseneazaReactor(m) {
+  const P = (r, a) => { const t = (a - 90) * Math.PI / 180; return [100 + r * Math.cos(t), 100 + r * Math.sin(t)]; };
+  const arc = (r, a0, a1) => {
+    const [x0, y0] = P(r, a0), [x1, y1] = P(r, a1);
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${Math.abs(a1 - a0) > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+  const unghi = v => Math.max(-2, Math.min(2, v)) / 2 * 135;
+  const linie = (cls, r0, r1, a) => { const [x0, y0] = P(r0, a), [x1, y1] = P(r1, a);
+    return `<line class="${cls}" x1="${x0.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${x1.toFixed(2)}" y2="${y1.toFixed(2)}"/>`; };
+  let s = '';
+
+  m.componente.forEach((c, i) => {
+    const centru = i * 60, jum = 26 * Math.max(0.07, Math.min(1, Math.abs(c.contributie) / 0.4));
+    const [x, y] = P(110, centru);
+    s += `<path class="r-pista" stroke-width="7" d="${arc(95, centru - 26, centru + 26)}"/>` +
+         `<path class="r-comp r-anim ${c.contributie < 0 ? 'neg' : 'poz'}" pathLength="1" stroke-width="7" d="${arc(95, centru - jum, centru + jum)}"/>` +
+         `<text class="r-nume" x="${x.toFixed(1)}" y="${(y - 0.8).toFixed(1)}">${esc(R_NUME[c.cheie] || c.nume)}</text>` +
+         `<text class="r-val" x="${x.toFixed(1)}" y="${(y + 6.2).toFixed(1)}">${(c.contributie >= 0 ? '+' : '−') + Math.abs(c.contributie).toFixed(2)}</text>`;
+  });
+
+  [[-2, m.prag_buy, 'acc'], [m.prag_buy, m.prag_sell, 'neu'], [m.prag_sell, 2, 'euf']].forEach(([a, b, cls]) => {
+    s += `<path class="r-zona r-anim ${cls}" pathLength="1" stroke-width="4.5" d="${arc(77, unghi(a) + 0.9, unghi(b) - 0.9)}"/>`;
+  });
+  [-2, -1, 0, 1, 2].forEach(v => {
+    const [x, y] = P(67, unghi(v));
+    s += linie('r-gradatie', 80.5, 83.5, unghi(v)) +
+         `<text class="r-cifra" x="${x.toFixed(1)}" y="${(y + 2).toFixed(1)}">${v > 0 ? '+' + v : v}</text>`;
+  });
+  s += linie('r-ac', 62, 86, unghi(m.valoare));
+
+  $('#reactor-dinamic').innerHTML = s;
+  if (!stare.reactorPornit) {       // animația de pornire rulează o singură dată, după ecranul de boot
+    stare.reactorPornit = true;
+    const porneste = () => requestAnimationFrame(() => requestAnimationFrame(() => $('#reactor').classList.add('pornit')));
+    if ($('#boot').classList.contains('gata')) porneste(); else setTimeout(porneste, 1900);
+  }
+}
+
 // ----------------------------------------------------------------- PIAȚĂ
 async function incarcaPiata() {
   try {
@@ -270,11 +315,10 @@ async function incarcaPiata() {
     const zileOnchain = d.prospetime.onchain_zi ? Math.round((new Date(d.prospetime.azi_utc) - new Date(d.prospetime.onchain_zi)) / 864e5) : 99;
     $('#led-onchain').className = 'led ' + (zileOnchain <= 9 ? 'ok' : 'warn');
 
-    const m = d.master, mi = Math.max(-2, Math.min(2, m.valoare));
-    $('#ac-index').style.left = ((mi + 2) / 4 * 100) + '%';
+    const m = d.master;
     $('#reactor-valoare').textContent = (m.valoare >= 0 ? '+' : '') + m.valoare.toFixed(2);
     const sem = $('#reactor-semnal'); sem.textContent = m.semnal; sem.className = 'semnal ' + m.semnal;
-    $('#arc-index').style.strokeDashoffset = 446 * (1 - (mi + 2) / 4);
+    deseneazaReactor(m);
 
     $('#componente').innerHTML = m.componente.map(c => {
       const w = Math.min(50, Math.abs(c.contributie) / 0.4 * 50);
@@ -649,6 +693,64 @@ function hoverHeatmap(ev) {
   tip.style.top = Math.max(6, Math.min(my - h / 2, r.height - h - 6)) + 'px';
 }
 
+// ----------------------------------------------------------------- ȘTIRI
+stare.stiri = { d: null, cat: 'toate', incarcatLa: 0 };
+
+function cand(iso) {   // "acum 12 min" / "acum 3 h" / data, după vechime
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
+  if (min < 60) return `acum ${min} min`;
+  if (min < 24 * 60) return `acum ${Math.round(min / 60)} h`;
+  return new Date(iso).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+}
+
+async function incarcaStiri() {
+  try {
+    const d = await api('/api/stiri');
+    stare.stiri.d = d; stare.stiri.incarcatLa = Date.now();
+    $('#cotatii').innerHTML = d.cotatii.map(c => `
+      <div class="cotatie cat-${c.categorie}">
+        <div class="nume">${esc(c.nume)}</div>
+        <div class="pret">${c.pret == null ? '—' : usd(c.pret, c.pret > 1000 ? 0 : 2)}</div>
+        <div class="det">${c.variatie_pct == null ? 'indisponibil' :
+          `<span class="${semnCls(c.variatie_pct)}">${pct(c.variatie_pct, 2)}</span><span class="det-lung"> față de închiderea anterioară, preț ${cand(c.ora)}</span>`}</div>
+      </div>`).join('');
+    afiseazaStiri();
+    afiseazaUltimaStire();
+  } catch (e) {
+    if (!stare.stiri.d) $('#us-continut').innerHTML = '<span class="t2">Știrile nu sunt disponibile acum. Reîncerc automat.</span>';
+    $('#lista-stiri').innerHTML = `<li class="t2" style="padding:14px 0">Nu pot încărca știrile acum (${esc(e.message)}). Reîncerc automat în câteva minute.</li>`;
+  }
+}
+
+function afiseazaUltimaStire() {   // bara de pe pagina COMANDĂ: mereu cel mai nou titlu
+  const d = stare.stiri.d, s = d && d.stiri[0];
+  if (!s) return;
+  $('#us-continut').innerHTML = `
+    <time datetime="${esc(s.data)}" title="${new Date(s.data).toLocaleString('ro-RO')}">${cand(s.data)}</time>
+    <span class="tag cat-${s.categorie}">${esc(d.categorii[s.categorie])}</span>
+    <a href="${esc(s.link)}" target="_blank" rel="noopener noreferrer" title="${esc(s.titlu)}">${esc(s.titlu)}</a>
+    <span class="sursa">${esc(s.sursa)}</span>`;
+  if (stare.stiri.ultimaAfisata && stare.stiri.ultimaAfisata !== s.link) {   // titlu nou: o clipire scurtă
+    const bara = $('#ultima-stire');
+    bara.classList.remove('noua'); void bara.offsetWidth; bara.classList.add('noua');
+  }
+  stare.stiri.ultimaAfisata = s.link;
+}
+
+function afiseazaStiri() {
+  const d = stare.stiri.d;
+  if (!d) return;
+  const lista = d.stiri.filter(s => stare.stiri.cat === 'toate' || s.categorie === stare.stiri.cat).slice(0, 80);
+  $('#lista-stiri').innerHTML = lista.length ? lista.map(s => `
+    <li class="stire cat-${s.categorie}">
+      <time datetime="${esc(s.data)}" title="${new Date(s.data).toLocaleString('ro-RO')}">${cand(s.data)}</time>
+      <a href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${esc(s.titlu)}</a>
+      <div class="meta"><span class="tag">${esc(d.categorii[s.categorie])}</span><span>${esc(s.sursa)}</span></div>
+    </li>`).join('') : '<li class="t2" style="padding:14px 0">Nicio știre în această categorie în ultimele 3 zile.</li>';
+  $('#stiri-stare').textContent = `${lista.length} titluri · actualizat ${new Date(stare.stiri.incarcatLa).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}` +
+    (d.surse_cazute.length ? ` · indisponibil acum: ${d.surse_cazute.join(', ')}` : '');
+}
+
 // ----------------------------------------------------------------- BACKTEST
 async function ruleazaBacktest(ev) {
   ev.preventDefault();
@@ -827,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
   boot();
   ceas(); setInterval(ceas, 1000);
   if (typeof Chart !== 'undefined') {
-    Chart.defaults.font.family = 'Rajdhani, sans-serif';
+    Chart.defaults.font.family = '"Chakra Petch", sans-serif';
     Chart.defaults.color = CUL.text2;
   } else {
     toast('Librăria de grafice nu s-a încărcat (verifică internetul). Restul platformei funcționează.', true);
@@ -854,8 +956,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }));
   $('#hm-canvas').addEventListener('mousemove', hoverHeatmap);
   $('#hm-canvas').addEventListener('mouseleave', () => $('#hm-tooltip').classList.add('hidden'));
-  let tRedim;
-  window.addEventListener('resize', () => { clearTimeout(tRedim); tRedim = setTimeout(() => { if (stare.pagina === 'heatmap') deseneazaHeatmap(); }, 150); });
+  let tRedim, eraIngust = window.innerWidth < 760;
+  window.addEventListener('resize', () => { clearTimeout(tRedim); tRedim = setTimeout(() => {
+    if (stare.pagina === 'heatmap') deseneazaHeatmap();
+    const ingust = window.innerWidth < 760;      // graficele își aleg etichetele după lățime: le refacem la trecerea pragului
+    if (ingust !== eraIngust) { eraIngust = ingust; incarcaIstoric(); incarcaComparatie(); if (stare.bt) afiseazaBacktest(); }
+  }, 150); });
   $('#form-backtest').addEventListener('submit', ruleazaBacktest);
   $('#bt-strategie').addEventListener('change', e => { $('#bt-start').value = e.target.value === 'sdca' ? '2023-02-15' : '2018-08-17'; });
   $('#form-chat').addEventListener('submit', trimiteIntrebare);
@@ -874,6 +980,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 4000);
   setInterval(() => { if (stare.pagina === 'boti') incarcaBoti(); }, 20000);
   setInterval(() => { if (stare.pagina === 'heatmap') incarcaHeatmap(); }, 60000);
+  incarcaStiri();                                   // bara „ultima știre” de pe COMANDĂ are nevoie de date de la pornire
+  setInterval(incarcaStiri, 300000);                // serverul le ține în cache 5 minute
+  setInterval(afiseazaUltimaStire, 60000);          // actualizează „acum X min”
+  $$('#seg-stiri button').forEach(b => b.addEventListener('click', () => {
+    stare.stiri.cat = b.dataset.cat;
+    $$('#seg-stiri button').forEach(x => x.classList.toggle('activ', x === b));
+    afiseazaStiri();
+  }));
   verificaStatus();
   setInterval(verificaStatus, 30000);
   pornesteWS();

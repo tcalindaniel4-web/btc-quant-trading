@@ -9,6 +9,7 @@ Expune datele existente ale proiectului, FĂRĂ să dubleze logica strategiilor:
   GET  /api/backtest     curbele de capital SDCA v2 vs AI vs Buy & Hold (aceeași perioadă)
   POST /api/backtest/sdca, /api/backtest/ai   backtest la cerere (start, capital), cu jurnal complet
   GET  /api/heatmap      heatmap estimat al lichidărilor din Open Interest Binance (?interval=15m|1h|4h)
+  GET  /api/stiri        știri despre Bitcoin, aur, S&P 500, piețe (RSS public) + cotații
   GET  /api/boti         starea boților live; POST /api/boti/<bot>/porneste|opreste|ciclu|reseteaza
   GET  /api/boti/<bot>/log    ultimele linii din log-ul botului
   POST /api/actualizeaza descarcă date noi (pipeline + date AI), în fundal
@@ -55,6 +56,7 @@ import backtest_ai  # noqa: E402
 import bot_live_ai  # noqa: E402
 import control_boti  # noqa: E402
 import heatmap_oi  # noqa: E402
+import stiri  # noqa: E402
 
 SDCA_STARE = BACKEND_DIR / 'strategii' / 'sdca' / 'bot_state.json'
 START_COMPARATIE = bt_sdca.START_IMPLICIT   # prima zi cu toate datele on-chain
@@ -263,7 +265,7 @@ def _calculeaza_backtest():
     stat['ai']['tranzactii'] = len(tr_a)
     stat['bh']['tranzactii'] = 1
     marcaje = [{'data': r['Data'], 'tip': r['Tip'], 'motiv': r['Motiv'], 'suma': r['Suma_USD'], 'pret': r['Pret']}
-               for _, r in tr_s.iterrows() if r['Motiv'] in ('FRONT-LOAD MASIV', 'MACRO TOP 70%', 'MOONBAG FOMO', 'MOONBAG PANIC')]
+               for _, r in tr_s.iterrows() if r['Motiv'] in ('FRONT-LOAD MASIV', 'MACRO TOP 70%', 'MOONBAG FOMO', 'MOONBAG PANIC', 'RĂSCUMPĂRARE')]
     return curat({'start': df['Data'].iloc[0], 'end': df['Data'].iloc[-1], 'capital': CAPITAL_COMPARATIE,
                   'data': df['Data'].tolist(), 'sdca': df['sdca'].round(2).tolist(), 'ai': df['ai'].round(2).tolist(),
                   'bh': df['bh'].round(2).tolist(), 'statistici': stat, 'marcaje_sdca': marcaje})
@@ -375,6 +377,16 @@ def heatmap(interval: str = '1h'):
         return curat(cache.ia('heatmap_' + interval, 55, None, lambda: heatmap_oi.calculeaza(interval)))
     except Exception as e:
         raise HTTPException(502, f"Nu pot descărca datele Binance Futures: {e}")
+
+
+# ----------------------------------------------------------------------------- știri de piață
+@app.get("/api/stiri")
+def stiri_piata():
+    """Titluri despre Bitcoin, aur, S&P 500 și piețe + cotațiile celor trei instrumente (cache 5 minute)."""
+    try:
+        return curat(cache.ia('stiri', 300, None, lambda: {**stiri.stiri(), 'cotatii': stiri.cotatii()}))
+    except Exception as e:
+        raise HTTPException(502, f"Nu pot descărca știrile: {e}")
 
 
 # ----------------------------------------------------------------------------- boți live (control)
@@ -554,8 +566,23 @@ if __name__ == "__main__":
                 webbrowser.open(URL)
             sys.exit(0)
 
+    def adresa_telefon():
+        """Adresa din rețeaua privată Tailscale (dacă platforma e publicată cu `tailscale serve --bg 8000`)."""
+        import re
+        import shutil
+        exe = shutil.which('tailscale') or r'C:\Program Files\Tailscale\tailscale.exe'
+        try:
+            r = subprocess.run([exe, 'serve', 'status'], capture_output=True, text=True, timeout=5)
+            m = re.search(r'https://[\w.-]+\.ts\.net', r.stdout or '')
+            return m.group(0) if m else None
+        except Exception:
+            return None
+
     print("=" * 64)
     print(f" J.A.R.V.I.S. pornește pe {URL}")
+    telefon = adresa_telefon()
+    if telefon:
+        print(f" Pe telefon (cu Tailscale conectat): {telefon}")
     print(" Lasă fereastra deschisă cât folosești platforma. Ctrl+C = oprire.")
     print("=" * 64)
     if deschide:

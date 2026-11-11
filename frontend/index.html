@@ -2,25 +2,34 @@
 <html lang="ro">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>J.A.R.V.I.S. Quant Terminal</title>
+  <!-- Aplicație pe ecranul principal (iPhone: Safari → Partajare → „Adaugă pe ecranul principal”) -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="J.A.R.V.I.S.">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#03080e">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;800&family=Rajdhani:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
   <div id="boot" title="Click pentru a sări peste"><pre id="boot-text"></pre></div>
-  <div class="scanlines"></div>
 
   <header class="topbar">
-    <div class="logo"><b>J.A.R.V.I.S.</b><span>BTC QUANT TERMINAL</span></div>
+    <div class="logo"><img src="icon-192.png" alt="" width="38" height="38"><div><b>J.A.R.V.I.S.</b><span>BTC quant terminal</span></div></div>
     <nav class="tabs" aria-label="Secțiuni">
       <button data-pagina="comanda" class="activ">COMANDĂ</button>
       <button data-pagina="boti">BOȚI LIVE</button>
       <button data-pagina="heatmap">HEATMAP OI</button>
+      <button data-pagina="stiri">ȘTIRI</button>
       <button data-pagina="backtest">BACKTEST</button>
     </nav>
     <div class="dreapta">
@@ -38,6 +47,11 @@
   <main>
     <!-- ================================================================ COMANDĂ -->
     <section class="pagina activa" id="p-comanda">
+      <div class="ultima-stire" id="ultima-stire" aria-live="polite">
+        <span class="us-eticheta"><i class="led ok puls"></i>Ultima știre</span>
+        <span class="us-continut" id="us-continut"><span class="t2">Caut ultimele titluri…</span></span>
+        <button class="btn mic" data-mergi="stiri">Toate știrile</button>
+      </div>
       <div class="grid-comanda">
 
         <div class="panel a-piata">
@@ -50,12 +64,6 @@
             <dt>Volum 24h</dt><dd id="vol24">—</dd>
             <dt>RSI 14</dt><dd id="rsi">—</dd>
           </dl>
-          <h3>MASTER_INDEX // ZONE</h3>
-          <div class="gauge" aria-label="Poziția Master_Index între -2 și +2">
-            <div class="gauge-bara"><span class="z acc" style="width:37.5%"></span><span class="z neu" style="width:32.5%"></span><span class="z euf" style="width:30%"></span></div>
-            <div class="gauge-ac"><i id="ac-index" style="left:50%"></i></div>
-            <div class="gauge-etichete"><span>-2 ACUMULARE</span><span>-0.5</span><span>0.8</span><span>EUFORIE +2</span></div>
-          </div>
           <h3>COMPONENTE (CONTRIBUȚIE LA INDEX)</h3>
           <div class="componente" id="componente"></div>
           <p class="nota" id="nota-onchain"></p>
@@ -63,29 +71,35 @@
 
         <div class="a-nucleu nucleu">
           <div class="reactor" id="reactor">
-            <svg viewBox="0 0 200 200" aria-hidden="true">
+            <!-- Reactorul e un instrument: cadran Master_Index (-2..+2, zone) + inel cu cele 6 componente -->
+            <svg viewBox="-26 -26 252 252" role="img" aria-labelledby="reactor-desc">
+              <desc id="reactor-desc">Cadranul Master_Index și contribuția fiecărei componente</desc>
               <defs>
                 <radialGradient id="g-miez" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#7ff3ff" stop-opacity=".9"/>
-                  <stop offset="45%" stop-color="#00c8ff" stop-opacity=".35"/>
+                  <stop offset="0%" stop-color="#7ff3ff" stop-opacity=".55"/>
+                  <stop offset="55%" stop-color="#00c8ff" stop-opacity=".16"/>
                   <stop offset="100%" stop-color="#00c8ff" stop-opacity="0"/>
                 </radialGradient>
               </defs>
-              <circle class="puls" cx="100" cy="100" r="62" fill="url(#g-miez)"/>
-              <g class="rot-lent"><circle cx="100" cy="100" r="96" fill="none" stroke="#00e1ff" stroke-opacity=".35" stroke-width="1" stroke-dasharray="2 5"/></g>
-              <g class="rot-invers"><circle cx="100" cy="100" r="88" fill="none" stroke="#00e1ff" stroke-opacity=".55" stroke-width="3" stroke-dasharray="46 14"/></g>
-              <g class="rot-rapid"><circle cx="100" cy="100" r="79" fill="none" stroke="#00e1ff" stroke-opacity=".4" stroke-width="5" stroke-dasharray="1 6"/></g>
-              <circle cx="100" cy="100" r="71" fill="none" stroke="#00e1ff" stroke-opacity=".12" stroke-width="4"/>
-              <circle id="arc-index" cx="100" cy="100" r="71" fill="none" stroke="#00e1ff" stroke-width="4" stroke-linecap="round"
-                      stroke-dasharray="446" stroke-dashoffset="446" transform="rotate(-90 100 100)" style="transition: stroke-dashoffset 1s ease"/>
-              <circle cx="100" cy="100" r="60" fill="#03080e" stroke="#00e1ff" stroke-opacity=".5" stroke-width="1"/>
+              <circle class="puls" cx="100" cy="100" r="74" fill="url(#g-miez)"/>
+              <g class="rot-lent"><circle cx="100" cy="100" r="124" fill="none" stroke="#00e1ff" stroke-opacity=".28" stroke-width="1" stroke-dasharray="1.2 11.785"/></g>
+              <g id="reactor-dinamic"></g>
+              <g class="rot-invers"><circle cx="100" cy="100" r="59" fill="none" stroke="#00e1ff" stroke-opacity=".35" stroke-width="1" stroke-dasharray="30 7.07"/></g>
+              <circle cx="100" cy="100" r="55" fill="#03080e" stroke="#00e1ff" stroke-opacity=".45" stroke-width="1"/>
             </svg>
             <div class="reactor-centru">
-              <span class="eticheta">MASTER_INDEX</span>
+              <span class="eticheta">Master_Index</span>
               <span class="valoare" id="reactor-valoare">—</span>
               <span class="semnal HOLD" id="reactor-semnal">—</span>
             </div>
           </div>
+          <p class="reactor-legenda">
+            <span><i style="background:var(--good)"></i>acumulare sub −0.5</span>
+            <span><i style="background:var(--text-2)"></i>neutru</span>
+            <span><i style="background:var(--bad)"></i>euforie peste 0.8</span>
+            <span><i style="background:var(--accent)"></i>componentă pozitivă</span>
+            <span><i style="background:var(--amber)"></i>negativă</span>
+          </p>
 
           <div class="consola">
             <div class="consola-cap"><span>J.A.R.V.I.S. // ASISTENT TRADING</span><span><i class="led warn"></i>OFFLINE</span></div>
@@ -131,7 +145,7 @@
           <div class="tabel-wrap" style="margin-top:14px">
             <table id="tabel-comparatie" aria-label="Statistici strategii"></table>
           </div>
-          <p class="nota">▲ pe curba SDCA marchează tranzacțiile mari (front-load, vânzarea de 70%, moonbag). Backtest cu comisioane și slippage, date on-chain întârziate 7 zile ca live. Rezultatele trecute nu garantează rezultate viitoare.</p>
+          <p class="nota">▲ pe curba SDCA marchează tranzacțiile mari (front-load, vânzarea de 70%, moonbag, răscumpărare). Backtest cu comisioane și slippage, date on-chain întârziate 7 zile ca live. Rezultatele trecute nu garantează rezultate viitoare.</p>
         </div>
       </div>
     </section>
@@ -178,6 +192,22 @@
           <h3>CUM E CALCULAT</h3>
           <p class="t2" style="font-size:13.5px;margin:0" id="hm-model"></p>
         </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ ȘTIRI -->
+    <section class="pagina" id="p-stiri">
+      <div class="cotatii" id="cotatii" aria-label="Cotații"></div>
+      <div class="panel" style="margin-top:18px">
+        <h2>ȘTIRI DE PIAȚĂ</h2>
+        <div class="antet-grafic">
+          <div class="segment" id="seg-stiri">
+            <button data-cat="toate" class="activ">Toate</button><button data-cat="btc">Bitcoin</button><button data-cat="aur">Aur</button><button data-cat="spx">S&amp;P 500</button><button data-cat="piete">Piețe</button>
+          </div>
+          <span class="t2" id="stiri-stare" style="font-size:12.5px"></span>
+        </div>
+        <ul class="stiri" id="lista-stiri"><li class="incarcare">Caut ultimele titluri</li></ul>
+        <p class="nota">Titluri din Google News, Yahoo Finance, CoinDesk, Cointelegraph și CNBC (fluxuri RSS publice), din ultimele 3 zile, reîmprospătate la 5 minute. Linkurile deschid articolul original pe site-ul publicației. Cotațiile pentru aur și S&amp;P 500 vin de la Yahoo Finance, cu întârziere; bursa americană e închisă în afara programului.</p>
       </div>
     </section>
 

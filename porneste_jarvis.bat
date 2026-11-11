@@ -16,7 +16,10 @@ if not exist "venv\Scripts\python.exe" (
     exit /b 1
 )
 
-"venv\Scripts\python.exe" backend\api\server.py --deschide
+rem Cand e pornit de Jarvis (JARVIS_FARA_BROWSER=1), Jarvis deschide singur pagina in Chrome.
+set "ARG_DESCHIDE=--deschide"
+if defined JARVIS_FARA_BROWSER set "ARG_DESCHIDE="
+"venv\Scripts\python.exe" backend\api\server.py %ARG_DESCHIDE%
 echo.
 echo Serverul s-a oprit.
 pause

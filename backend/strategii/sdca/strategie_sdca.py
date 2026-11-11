@@ -14,13 +14,26 @@ SDCA v2 = regulile originale + 3 corecții:
      nu de la prețul la care am vândut (altfel botul rămânea pe cash pentru totdeauna dacă piața
      urca mai sus după vânzare - exact ce s-a întâmplat în 2024-2026).
   3. FIX: la începutul unui ciclu nou, alerta de euforie din ciclul trecut se șterge.
+  4. RĂSCUMPĂRARE LA REDUCERE: un semnal de top nu poate ști dacă e vârful ciclului sau doar un vârf
+     local (martie 2024, $65k: cea mai mare supraevaluare MVRV a ciclului, dar prețul a ajuns ulterior
+     la $126k). În loc să ghicim, după vânzare cumpărăm înapoi dacă piața capitulează (Master_Index < -0.5)
+     la un preț cu ≥10% sub cel de vânzare: mai mult BTC decât înainte, din aceiași bani.
+     Rezultat identic pentru orice prag între 5% și 15% (nu depinde de o valoare anume); în bear market-ul
+     2021-2022 (test separat, cu MVRV istoric CoinMetrics) nu a înrăutățit rezultatul.
 
 Validare pe date REALISTE (MVRV/SOPR întârziate 7 zile, cum le vede botul live), 28 de porniri
-lunare 2023-03 .. 2025-06: medie +69% (v1: +37%, Buy&Hold: +64%), drawdown mediu -34% (B&H -53%).
-Limită: date on-chain gratuite doar din 2022-11 => un singur ciclu; regulile au fost alese după ce am
-văzut aceste date, deci dovada e mai slabă decât un test pe date complet noi.
+lunare 2023-03 .. 2025-06: vezi `backtest_sdca_long.py --robustete` (cifrele se schimbă odată cu piața).
+La adăugarea regulii 4: medie +88% față de +64% fără ea, mediană +86% față de +75%, același drawdown,
+rezultat mai bun în 21 din 28 de porniri și egal în rest.
+Limită: date on-chain complete doar din 2022-11 => un singur ciclu; regulile au fost alese după ce am
+văzut aceste date, deci dovada e mai slabă decât un test pe date complet noi. Câștigul regulii 4 vine
+în principal dintr-un singur episod (corecția din august-septembrie 2024).
 
 Testat și RESPINS (pe date realiste):
+  - VÂNZARE ÎN TRANȘE MAI MICI (33% / 50% / proporțional cu MVRV) cu păstrarea restului: mai slab decât
+    70% + moonbag (medie +49..54% față de +64%), pentru că restul era ținut prin scăderea din 2025-2026.
+  - TRAILING STOP sau „următorul semnal de vârf” în loc de +20% fix pentru moonbag: media crește, dar
+    mediana scade și câștigă doar în 13/28 porniri (un singur episod) - dovadă insuficientă.
   - IEȘIRE DIN "FALS TOP" (reluarea acumulării când prețul depășește vârful vândut): fără
     întârzierea on-chain părea foarte bună (+205%), dar cu datele reale reintra târziu în ciclu
     ($113k în 2025) și ținea poziția prin prăbușire: medie -3%, drawdown -50%. Codul rămâne,
@@ -33,6 +46,7 @@ import pandas as pd
 PRAG_MVRV_TOP = (2 / 3) ** 1.5   # MVRV în treimea de sus a benzii (scara MVRV ajustat ridicată la 1.5)
 PRAG_Z_EUFORIE = 1.5
 IESIRE_FALS_TOP = False          # respinsă în validarea pe date realiste (vezi mai sus)
+RASCUMPARARE_REDUCERE = 0.10     # răscumpărare după vânzare: preț cu ≥10% sub vânzare + capitulare (0 = dezactivat)
 
 
 def stare_noua(capital):
@@ -169,15 +183,25 @@ def decide(state, azi, v2=True):
             mesaje.append(f"⚠️ SELL MOONBAG PANIC -22% | Z-Score: {z_score_raw:+.2f} | Încasat: ${incasare:,.2f}")
             state["btc"] = 0; state["total_investit"] = 0; state["distributie_finala_activa"] = False; actiune_executata = True
 
+    # [v2] RĂSCUMPĂRARE LA REDUCERE: după o vânzare de top, dacă piața capitulează (Master_Index < -0.5)
+    # la un preț cu cel puțin RASCUMPARARE_REDUCERE sub prețul la care am vândut, cumpărăm înapoi mai ieftin
+    # (40% din cash la fiecare semnal), fără să mai așteptăm -40% de la vârf.
+    rascumparare = (v2 and RASCUMPARARE_REDUCERE and state["interdictie_macro_activa"]
+                    and state["pret_vanzare_70"] > 0 and z_score_raw < -0.5
+                    and pret <= state["pret_vanzare_70"] * (1 - RASCUMPARARE_REDUCERE))
+
     # --- CUMPĂRĂRI ---
-    if not actiune_executata and not state["interdictie_macro_activa"] and not state["profit_lock_activ"]:
+    if not actiune_executata and ((not state["interdictie_macro_activa"] and not state["profit_lock_activ"]) or rascumparare):
         if z_score_raw < -0.5:
             if state["zile_de_la_buy"] >= 7 or pret <= state["ultimul_pret_buy"] * 0.90:
-                procent = 0.70 if not state["prima_intrare_facuta"] else 0.40
+                procent = 0.70 if (not state["prima_intrare_facuta"] and not rascumparare) else 0.40
                 alocare = min(state["cash"] * procent, state["cash"])
                 if alocare > 10:
                     _cumpara(state, alocare, pret)
-                    if not state["prima_intrare_facuta"]:
+                    if rascumparare:
+                        mesaje.append(f"🟢 BUY RĂSCUMPĂRARE | Cumpărat ${alocare:,.2f} la ${pret:,.2f} "
+                                      f"({(pret / state['pret_vanzare_70'] - 1):.0%} față de vânzarea de la ${state['pret_vanzare_70']:,.0f})")
+                    elif not state["prima_intrare_facuta"]:
                         mesaje.append(f"🔥 BUY FRONT-LOAD MASIV | Cumpărat ${alocare:,.2f} la ${pret:,.2f}")
                         state["prima_intrare_facuta"] = True
                     else:
