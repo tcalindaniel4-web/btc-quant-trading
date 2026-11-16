@@ -1,5 +1,5 @@
 """
-J.A.R.V.I.S. - server API pentru interfața web (frontend/).
+VEGA - server API pentru interfața web (frontend/).
 
 Expune datele existente ale proiectului, FĂRĂ să dubleze logica strategiilor:
   GET  /api/piata        preț live Binance + Master_Index și componentele lui
@@ -56,6 +56,7 @@ import backtest_ai  # noqa: E402
 import bot_live_ai  # noqa: E402
 import control_boti  # noqa: E402
 import heatmap_oi  # noqa: E402
+import derivate  # noqa: E402
 import stiri  # noqa: E402
 
 SDCA_STARE = BACKEND_DIR / 'strategii' / 'sdca' / 'bot_state.json'
@@ -66,7 +67,7 @@ PONDERI = {'Z_VWAP': 0.10, 'Z_MACD': 0.10, 'Z_RSI': 0.10, 'Z_Funding_Rate': 0.15
 NUME_COMPONENTE = {'Z_VWAP': 'VWAP', 'Z_MACD': 'MACD', 'Z_RSI': 'RSI', 'Z_Funding_Rate': 'Funding',
                    'Adjusted_MVRV': 'MVRV ajustat', 'Z_SOPR': 'STH-SOPR'}
 
-app = FastAPI(title="J.A.R.V.I.S. BTC Quant Terminal")
+app = FastAPI(title="VEGA BTC Quant Terminal")
 
 
 # ----------------------------------------------------------------------------- utilitare
@@ -379,6 +380,17 @@ def heatmap(interval: str = '1h'):
         raise HTTPException(502, f"Nu pot descărca datele Binance Futures: {e}")
 
 
+# ----------------------------------------------------------------------------- derivate (OI, funding, CVD, long/short)
+@app.get("/api/derivate")
+def derivate_btc(interval: str = '1h'):
+    if interval not in heatmap_oi.INTERVALE:
+        raise HTTPException(422, f"Interval invalid. Alege: {', '.join(heatmap_oi.INTERVALE)}")
+    try:
+        return curat(cache.ia('derivate_' + interval, 55, None, lambda: derivate.calculeaza(interval)))
+    except Exception as e:
+        raise HTTPException(502, f"Nu pot descărca datele Binance Futures: {e}")
+
+
 # ----------------------------------------------------------------------------- știri de piață
 @app.get("/api/stiri")
 def stiri_piata():
@@ -536,7 +548,7 @@ def backtest_ai_endpoint(cerere: CerereBacktest):
 # ----------------------------------------------------------------------------- asistent (etapa finală)
 @app.post("/api/chat")
 def chat():
-    raise HTTPException(status_code=503, detail="Asistentul J.A.R.V.I.S. nu este încă activat. "
+    raise HTTPException(status_code=503, detail="Asistentul VEGA nu este încă activat. "
                                                 "Se conectează în etapa finală, cu cheia API Anthropic.")
 
 
@@ -561,7 +573,7 @@ if __name__ == "__main__":
     with socket.socket() as s:
         s.settimeout(0.5)
         if s.connect_ex(('127.0.0.1', 8000)) == 0:
-            print(f"J.A.R.V.I.S. rulează deja pe {URL}")
+            print(f"VEGA rulează deja pe {URL}")
             if deschide:
                 webbrowser.open(URL)
             sys.exit(0)
@@ -579,7 +591,7 @@ if __name__ == "__main__":
             return None
 
     print("=" * 64)
-    print(f" J.A.R.V.I.S. pornește pe {URL}")
+    print(f" VEGA pornește pe {URL}")
     telefon = adresa_telefon()
     if telefon:
         print(f" Pe telefon (cu Tailscale conectat): {telefon}")

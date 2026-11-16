@@ -65,7 +65,8 @@ def explicatie(tip, z, zi, st_inainte):
         dd = (z['Cycle_Peak_90d'] - z['Close']) / z['Cycle_Peak_90d']
         declansator = (f"prețul e cu {dd:.1%} sub vârful pe 90 de zile (${z['Cycle_Peak_90d']:,.0f})" if dd >= 0.10
                        else f"prețul a coborât sub media pe 50 de zile (${z['SMA_50']:,.0f})")
-        return (f"alerta de euforie era deja armată (Master_Index ≥ 1.5 cu MVRV ajustat ≥ {PRAG_MVRV_TOP:.2f}), "
+        return (f"alerta de euforie era deja armată (Master_Index ≥ 1.5, sau ≥ 1.0 după un ATH nou în ultimele 90 de zile, "
+                f"cu MVRV ajustat ≥ {PRAG_MVRV_TOP:.2f}), "
                 f"iar acum trendul s-a epuizat: {declansator} → vindem 70% (MVRV azi {z['Adjusted_MVRV']:.2f})")
     if tip == 'RĂSCUMPĂRARE':
         v = st_inainte['pret_vanzare_70']

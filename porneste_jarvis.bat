@@ -1,11 +1,11 @@
 @echo off
 rem ======================================================================
-rem  J.A.R.V.I.S. - pornire platforma (dublu-click pe acest fisier)
+rem  VEGA - pornire platforma (dublu-click pe acest fisier)
 rem  Serverul ruleaza cat timp aceasta fereastra e deschisa.
 rem  Inchide fereastra (sau Ctrl+C) ca sa opresti platforma.
 rem ======================================================================
 cd /d "%~dp0"
-title J.A.R.V.I.S. - server platforma
+title VEGA - server platforma
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 

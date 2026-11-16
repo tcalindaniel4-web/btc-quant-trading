@@ -1,6 +1,6 @@
 {
-  "name": "J.A.R.V.I.S. Quant Terminal",
-  "short_name": "J.A.R.V.I.S.",
+  "name": "VEGA Quant Terminal",
+  "short_name": "VEGA",
   "description": "Terminal de tranzacționare cantitativă BTC: boți, backtest, heatmap Open Interest",
   "start_url": "/",
   "scope": "/",

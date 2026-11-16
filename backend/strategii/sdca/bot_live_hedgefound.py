@@ -14,6 +14,7 @@ PIPELINE_DIR = SDCA_DIR.parent.parent / 'pipeline'
 sys.path.insert(0, str(PIPELINE_DIR))
 from data_loader import incarca_dataset  # noqa: E402
 from strategie_sdca import stare_noua, adauga_indicatori, decide  # noqa: E402  (logica comună cu backtest-ul)
+import executie_alpaca  # noqa: E402  (oglindire în contul de test Alpaca, dacă e configurat în .env)
 
 warnings.filterwarnings('ignore')
 
@@ -130,6 +131,11 @@ def rulare_ciclu_analiza(offline=False, capital=None):
 
     salveaza_memoria(state)
     afiseaza_portofoliu(state, azi['Close'])
+
+    # Execuție în contul de test Alpaca: doar live (nu offline/replay), după ce decizia e salvată.
+    if not offline:
+        for m in executie_alpaca.sincronizeaza(state['btc'], azi['Close']):
+            print(m)
 
 def replay_mode(start, capital, pauza):
     """

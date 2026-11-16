@@ -20,6 +20,21 @@ SDCA v2 = regulile originale + 3 corecții:
      la un preț cu ≥10% sub cel de vânzare: mai mult BTC decât înainte, din aceiași bani.
      Rezultat identic pentru orice prag între 5% și 15% (nu depinde de o valoare anume); în bear market-ul
      2021-2022 (test separat, cu MVRV istoric CoinMetrics) nu a înrăutățit rezultatul.
+  5. EUFORIE LA ATH NOU (A1): alerta de top se armează de la Master_Index ≥ +1.0 (în loc de +1.5) DOAR
+     dacă BTC a făcut un ATH nou în ultimele 90 de zile; altfel pragul rămâne +1.5. Euforia reală apare în
+     teritoriu de preț nou; un Z mare sub vechiul ATH e doar o revenire (nov. 2020, $17k: Z ≥ 1 fără ATH
+     nou - pragul de 1.0 fără condiție vindea acolo). Test 2026-11, 56 de porniri: mai bun în 30, mai slab
+     în 0; ciclul curent mediană +90% → +107%, cel mai slab caz -31% → -10%, drawdown maxim -53% → -36%;
+     2018 → azi medie +513% → +640% (Master_Index reconstruit aproximativ înainte de 2022-11).
+     Condiția de ATH a fost aleasă după ce am văzut eșecul din 2020, deci există risc de potrivire pe istorie.
+     ATH-ul se calculează din istoricul complet de preț (btc_1d.csv, din 2017), nu din master_dataset (2022-07+).
+  6. CUMPĂRARE RAPIDĂ LA CAPITULARE: sub Master_Index -0.5 se cumpără tot la 7 zile, dar în orice zi din pauză
+     în care Master_Index e sub -0.8 se cumpără în ziua respectivă (cel mult o dată pe zi). Înlocuiește vechea
+     excepție „preț cu ≥10% sub ultima cumpărare”. Motiv: în nov. 2026 un micro-buy la Z -0.05 a pornit pauza
+     de 7 zile, iar prima intrare mare (70%) a fost blocată deși Z ajunsese la -0.94. Test 2026-11-13, 56 de
+     porniri: ciclul curent medie +90% → +97%, mai bun în 15 / mai slab în 13; 2018 → azi medie +617% → +644%,
+     mediană +252% → +278%, mai bun în 18 / mai slab în 10; drawdown neschimbat. Varianta „doar în ziua în care
+     Z trece sub -0.8” (o singură dată) era mai slabă în 17/28 și 24/28 porniri; pragul -1.0 era mai slab în 27/28.
 
 Validare pe date REALISTE (MVRV/SOPR întârziate 7 zile, cum le vede botul live), 28 de porniri
 lunare 2023-03 .. 2025-06: vezi `backtest_sdca_long.py --robustete` (cifrele se schimbă odată cu piața).
@@ -39,12 +54,29 @@ Testat și RESPINS (pe date realiste):
     ($113k în 2025) și ținea poziția prin prăbușire: medie -3%, drawdown -50%. Codul rămâne,
     dezactivat prin IESIRE_FALS_TOP = False.
   - Reintrare agresivă imediată la breakout (cumpăra exact la vârfuri).
+  - MICRO-SELL 5-10% la Master_Index 0.8..1: vinde la începutul bull run-ului (ian.-feb. 2024, $45-52k);
+    mai slab în 17-20 din 28 de porniri. MICRO-BUY doar până la -0.4 (în loc de 0): neutru (15 / 13).
 Rezultate: vezi backtest_sdca_long.py.
 """
+from pathlib import Path
+
 import pandas as pd
 
 PRAG_MVRV_TOP = (2 / 3) ** 1.5   # MVRV în treimea de sus a benzii (scara MVRV ajustat ridicată la 1.5)
 PRAG_Z_EUFORIE = 1.5
+# Cumpărare rapidă în pauza de 7 zile (regula 6): dacă Master_Index scade sub REINTRARE_Z, cumpărăm în ziua
+# respectivă fără să așteptăm 7 zile. Mod 'traversare' = doar în ziua în care Z trece sub prag (o dată pe
+# traversare); 'zilnic' = în fiecare zi cu Z sub prag (cel mult o dată pe zi); None = dezactivat.
+# REINTRARE_PASTREAZA_10: păstrează și vechea condiție (preț cu ≥10% sub ultima cumpărare).
+REINTRARE_Z = -0.8
+REINTRARE_MOD = 'zilnic'
+REINTRARE_PASTREAZA_10 = False
+PRAG_Z_EUFORIE_ATH = 1.0        # pragul de euforie când BTC a făcut un ATH nou în ultimele 90 de zile (regula 5)
+FEREASTRA_ATH = 90
+# istoricul complet de preț (din 2017); master_dataset.csv începe abia în 2022-07, deci nu știe ATH-ul din 2021
+ISTORIC_PRET = Path(__file__).resolve().parent.parent / 'ai_hedgefund' / 'data' / 'btc_1d.csv'
+# rezervă dacă fișierul lipsește: ATH-ul Binance din 2021-11-10
+ATH_REZERVA = ('2021-11-10', 69000.0)
 IESIRE_FALS_TOP = False          # respinsă în validarea pe date realiste (vezi mai sus)
 RASCUMPARARE_REDUCERE = 0.10     # răscumpărare după vânzare: preț cu ≥10% sub vânzare + capitulare (0 = dezactivat)
 
@@ -68,13 +100,44 @@ def zile_intre(data_veche, data_noua):
         return 0
 
 
+def _ath_istoric(date):
+    """ATH-ul (cel mai mare High) atins până la fiecare zi din `date`, din istoricul complet de preț."""
+    try:
+        px = pd.read_csv(ISTORIC_PRET, usecols=['Data', 'High']).sort_values('Data')
+        ath = px.set_index('Data')['High'].cummax()
+        return ath.reindex(ath.index.union(date)).ffill().reindex(date).fillna(0.0).values
+    except (OSError, ValueError, KeyError):
+        return [ATH_REZERVA[1] if d >= ATH_REZERVA[0] else 0.0 for d in date]
+
+
 def adauga_indicatori(df):
     df = df.copy()
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
     df['Local_High'] = df['High'].rolling(window=20, center=False).max()
     df['Cycle_Peak_90d'] = df['High'].rolling(window=90, min_periods=1).max()
     df['Z_Max_45d'] = df['Master_Index'].rolling(window=45).max()
+    # [regula 5] ATH nou în ultimele 90 de zile: vârful pe 90 de zile e chiar ATH-ul de până azi
+    df['ATH'] = pd.Series(_ath_istoric(df['Data'].astype(str)), index=df.index).combine(df['High'].cummax(), max)
+    varf_ath = df['High'].rolling(window=FEREASTRA_ATH, min_periods=1).max()
+    df['ATH_Nou_90d'] = varf_ath >= df['ATH']
+    df['Z_Ieri'] = df['Master_Index'].shift(1)   # [regula 6] pentru a detecta ziua în care Z trece sub prag
     return df
+
+
+def reintrare_rapida(state, azi):
+    """[regula 6] Cumpărare permisă în pauza de 7 zile: Z sub REINTRARE_Z (cel mult o dată pe zi)."""
+    z = azi.get('Master_Index', 0)
+    if not REINTRARE_MOD or z >= REINTRARE_Z or state["zile_de_la_buy"] < 1:
+        return False
+    if REINTRARE_MOD == 'traversare':
+        z_ieri = azi.get('Z_Ieri', float('nan'))
+        return not (z_ieri < REINTRARE_Z)          # ieri era peste prag (sau lipsește) -> azi l-a traversat
+    return True
+
+
+def prag_euforie(azi, v2=True):
+    """Pragul Master_Index care armează alerta de top: +1.0 după un ATH nou în ultimele 90 de zile, altfel +1.5."""
+    return PRAG_Z_EUFORIE_ATH if (v2 and bool(azi.get('ATH_Nou_90d', False))) else PRAG_Z_EUFORIE
 
 
 def _cumpara(state, alocare, pret):
@@ -152,7 +215,7 @@ def decide(state, azi, v2=True):
 
     # TOP CONFIRMAT & ATH BREAKER  ([v2] + confirmare on-chain: MVRV în treimea de sus a benzii)
     confirmare_onchain = (mvrv_ajustat >= PRAG_MVRV_TOP) if v2 else True
-    if z_score_raw >= PRAG_Z_EUFORIE and confirmare_onchain \
+    if z_score_raw >= prag_euforie(azi, v2) and confirmare_onchain \
             and (state["macro_top_trecut"] == 0 or pret >= state["macro_top_trecut"]):
         state["alerta_rosie_euforie"] = True
 
@@ -193,7 +256,8 @@ def decide(state, azi, v2=True):
     # --- CUMPĂRĂRI ---
     if not actiune_executata and ((not state["interdictie_macro_activa"] and not state["profit_lock_activ"]) or rascumparare):
         if z_score_raw < -0.5:
-            if state["zile_de_la_buy"] >= 7 or pret <= state["ultimul_pret_buy"] * 0.90:
+            if state["zile_de_la_buy"] >= 7 or reintrare_rapida(state, azi) \
+                    or (REINTRARE_PASTREAZA_10 and pret <= state["ultimul_pret_buy"] * 0.90):
                 procent = 0.70 if (not state["prima_intrare_facuta"] and not rascumparare) else 0.40
                 alocare = min(state["cash"] * procent, state["cash"])
                 if alocare > 10:

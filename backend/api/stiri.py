@@ -1,5 +1,5 @@
 """
-ȘTIRI DE PIAȚĂ pentru platforma J.A.R.V.I.S.: titluri despre Bitcoin, aur, S&P 500 și piețe în general.
+ȘTIRI DE PIAȚĂ pentru platforma VEGA: titluri despre Bitcoin, aur, S&P 500 și piețe în general.
 
 Surse (fluxuri RSS publice, fără cheie API):
   - Google News (căutări pe subiect; dă și numele publicației)
@@ -18,7 +18,7 @@ from email.utils import parsedate_to_datetime
 
 import requests
 
-UA = {'User-Agent': 'Mozilla/5.0 (JarvisQuantTerminal; proiect academic)'}
+UA = {'User-Agent': 'Mozilla/5.0 (VegaQuantTerminal; proiect academic)'}
 TIMEOUT = 12
 MAX_PE_CATEGORIE = 40
 VECHIME_MAX_ZILE = 3

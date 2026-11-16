@@ -13,7 +13,7 @@ licenta crypto ai/
 ├── venv/                         ← mediul virtual Python
 │
 ├── backend/
-│   ├── api/                      ← serverul platformei web J.A.R.V.I.S. (FastAPI)
+│   ├── api/                      ← serverul platformei web VEGA (FastAPI)
 │   │   ├── server.py                 API: piață, boți, backtest, actualizare date, chat (etapa finală)
 │   │   ├── control_boti.py           pornește / oprește boții live ca procese separate
 │   │   ├── heatmap_oi.py             heatmap estimat al lichidărilor din Open Interest Binance
@@ -54,11 +54,11 @@ licenta crypto ai/
 │           ├── data/                 date proprii (btc_1d.csv, funding_1d.csv)
 │           └── rezultate/            tranzacții backtest, echitate, jurnal live
 │
-├── frontend/                     ← interfața web J.A.R.V.I.S. (index.html, style.css, app.js)
+├── frontend/                     ← interfața web VEGA (index.html, style.css, app.js)
 └── arhiva/                       ← scripturi și date vechi, păstrate pentru istoric (nu se mai folosesc)
 ```
 
-## 🖥️ Platforma J.A.R.V.I.S.
+## 🖥️ Platforma VEGA
 
 **Cel mai simplu:** dublu-click pe **`porneste_jarvis.bat`** (în folderul proiectului). Se deschide o fereastră
 cu serverul și, după câteva secunde, platforma în browser. **Platforma funcționează cât timp fereastra rămâne

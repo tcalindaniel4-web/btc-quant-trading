@@ -3,89 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>J.A.R.V.I.S. Quant Terminal</title>
+  <title>VEGA Quant Terminal</title>
   <!-- Aplicație pe ecranul principal (iPhone: Safari → Partajare → „Adaugă pe ecranul principal”) -->
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="J.A.R.V.I.S.">
+  <meta name="apple-mobile-web-app-title" content="VEGA">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#03080e">
+  <meta name="theme-color" content="#050607">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
+  <div class="fundal" aria-hidden="true"><i></i><i></i><i></i></div>
   <div id="boot" title="Click pentru a sări peste"><pre id="boot-text"></pre></div>
 
   <header class="topbar">
-    <div class="logo"><img src="icon-192.png" alt="" width="38" height="38"><div><b>J.A.R.V.I.S.</b><span>BTC quant terminal</span></div></div>
+    <div class="logo">
+      <span class="logo-semn" aria-hidden="true">₿</span>
+      <div><b>VEGA</b><span>BTC quant terminal</span></div>
+    </div>
+    <div class="pret-mini" aria-hidden="true"><span id="pret-mini">—</span><small id="variatie-mini"></small></div>
     <nav class="tabs" aria-label="Secțiuni">
-      <button data-pagina="comanda" class="activ">COMANDĂ</button>
-      <button data-pagina="boti">BOȚI LIVE</button>
-      <button data-pagina="heatmap">HEATMAP OI</button>
-      <button data-pagina="stiri">ȘTIRI</button>
-      <button data-pagina="backtest">BACKTEST</button>
+      <button data-pagina="comanda" class="activ">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Comandă</span></button>
+      <button data-pagina="boti">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M9 16h6"/></svg>
+        <span>Boți live</span></button>
+      <button data-pagina="heatmap">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M9 20V4M14 20v-7M19 20V8"/></svg>
+        <span>Heatmap OI</span></button>
+      <button data-pagina="stiri">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 2 0V9"/><path d="M5 4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14"/><path d="M8 8h6M8 12h6M8 16h4"/></svg>
+        <span>Știri</span></button>
+      <button data-pagina="backtest">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+        <span>Backtest</span></button>
     </nav>
     <div class="dreapta">
       <div class="surse">
-        <span title="Prețul live de pe Binance"><i class="led" id="led-binance"></i>BINANCE</span>
-        <span title="Master_Index (pipeline zilnic)"><i class="led" id="led-master"></i>PIPELINE</span>
-        <span title="Date on-chain BGeometrics (întârziere normală 7 zile)"><i class="led" id="led-onchain"></i>ON-CHAIN</span>
-        <span id="auto-status" title="Actualizare automată"><i class="led" id="led-auto"></i>AUTO <b class="num" id="auto-ora"></b></span>
+        <span title="Prețul live de pe Binance"><i class="led" id="led-binance"></i>Binance</span>
+        <span title="Master_Index (pipeline zilnic)"><i class="led" id="led-master"></i>Pipeline</span>
+        <span title="Date on-chain BGeometrics (întârziere normală 7 zile)"><i class="led" id="led-onchain"></i>On-chain</span>
+        <span id="auto-status" title="Actualizare automată"><i class="led" id="led-auto"></i>Auto <b class="num" id="auto-ora"></b></span>
       </div>
-      <button class="btn" id="btn-actualizeaza" title="Descarcă date noi: Binance, BGeometrics, istoric AI">⟳ ACTUALIZEAZĂ DATE</button>
       <div class="ceas"><span id="ceas-local">--:--:--</span><small id="ceas-utc">UTC --:--</small></div>
+      <button class="btn" id="btn-actualizeaza" title="Descarcă date noi: Binance, BGeometrics, istoric AI"><span class="ic">⟳</span><span class="txt">Actualizează date</span></button>
     </div>
   </header>
 
   <main>
     <!-- ================================================================ COMANDĂ -->
     <section class="pagina activa" id="p-comanda">
-      <div class="ultima-stire" id="ultima-stire" aria-live="polite">
-        <span class="us-eticheta"><i class="led ok puls"></i>Ultima știre</span>
-        <span class="us-continut" id="us-continut"><span class="t2">Caut ultimele titluri…</span></span>
-        <button class="btn mic" data-mergi="stiri">Toate știrile</button>
-      </div>
       <div class="grid-comanda">
 
         <div class="panel a-piata">
-          <h2>PIAȚĂ // BTC-USDT</h2>
-          <div><span class="pret-mare" id="pret">—</span><span class="variatie" id="variatie"></span></div>
+          <h2>BTC · USDT</h2>
+          <div class="pret-rand"><span class="pret-mare" id="pret">—</span><span class="variatie" id="variatie"></span></div>
           <div class="sursa-pret" id="sursa-pret"><i class="led"></i>conectare la Binance…</div>
           <dl class="kv">
-            <dt>Maxim 24h</dt><dd id="max24">—</dd>
-            <dt>Minim 24h</dt><dd id="min24">—</dd>
-            <dt>Volum 24h</dt><dd id="vol24">—</dd>
-            <dt>RSI 14</dt><dd id="rsi">—</dd>
+            <div><dt>Maxim 24h</dt><dd id="max24">—</dd></div>
+            <div><dt>Minim 24h</dt><dd id="min24">—</dd></div>
+            <div><dt>Volum 24h</dt><dd id="vol24">—</dd></div>
+            <div><dt>RSI 14</dt><dd id="rsi">—</dd></div>
           </dl>
-          <h3>COMPONENTE (CONTRIBUȚIE LA INDEX)</h3>
-          <div class="componente" id="componente"></div>
-          <p class="nota" id="nota-onchain"></p>
         </div>
 
-        <div class="a-nucleu nucleu">
+        <div class="panel a-semnal">
+          <h2>Master_Index · reactor</h2>
           <div class="reactor" id="reactor">
-            <!-- Reactorul e un instrument: cadran Master_Index (-2..+2, zone) + inel cu cele 6 componente -->
+            <!-- cadran Master_Index (-2..+2, zone) + inelul celor 6 componente, desenat de app.js -->
             <svg viewBox="-26 -26 252 252" role="img" aria-labelledby="reactor-desc">
               <desc id="reactor-desc">Cadranul Master_Index și contribuția fiecărei componente</desc>
               <defs>
                 <radialGradient id="g-miez" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#7ff3ff" stop-opacity=".55"/>
-                  <stop offset="55%" stop-color="#00c8ff" stop-opacity=".16"/>
-                  <stop offset="100%" stop-color="#00c8ff" stop-opacity="0"/>
+                  <stop offset="0%" stop-color="#d9ff7a" stop-opacity=".45"/>
+                  <stop offset="55%" stop-color="#c6ff3d" stop-opacity=".12"/>
+                  <stop offset="100%" stop-color="#c6ff3d" stop-opacity="0"/>
                 </radialGradient>
               </defs>
               <circle class="puls" cx="100" cy="100" r="74" fill="url(#g-miez)"/>
-              <g class="rot-lent"><circle cx="100" cy="100" r="124" fill="none" stroke="#00e1ff" stroke-opacity=".28" stroke-width="1" stroke-dasharray="1.2 11.785"/></g>
+              <g class="rot-lent"><circle cx="100" cy="100" r="124" fill="none" stroke="#c6ff3d" stroke-opacity=".25" stroke-width="1" stroke-dasharray="1.2 11.785"/></g>
+              <g class="rot-mediu"><circle cx="100" cy="100" r="116" fill="none" stroke="#c6ff3d" stroke-opacity=".12" stroke-width=".6" stroke-dasharray="40 20 4 20"/></g>
               <g id="reactor-dinamic"></g>
-              <g class="rot-invers"><circle cx="100" cy="100" r="59" fill="none" stroke="#00e1ff" stroke-opacity=".35" stroke-width="1" stroke-dasharray="30 7.07"/></g>
-              <circle cx="100" cy="100" r="55" fill="#03080e" stroke="#00e1ff" stroke-opacity=".45" stroke-width="1"/>
+              <g class="rot-invers"><circle cx="100" cy="100" r="59" fill="none" stroke="#c6ff3d" stroke-opacity=".35" stroke-width="1" stroke-dasharray="30 7.07"/></g>
+              <circle cx="100" cy="100" r="55" fill="#07090a" stroke="#c6ff3d" stroke-opacity=".4" stroke-width="1"/>
             </svg>
             <div class="reactor-centru">
               <span class="eticheta">Master_Index</span>
@@ -94,58 +105,102 @@
             </div>
           </div>
           <p class="reactor-legenda">
-            <span><i style="background:var(--good)"></i>acumulare sub −0.5</span>
-            <span><i style="background:var(--text-2)"></i>neutru</span>
-            <span><i style="background:var(--bad)"></i>euforie peste 0.8</span>
-            <span><i style="background:var(--accent)"></i>componentă pozitivă</span>
-            <span><i style="background:var(--amber)"></i>negativă</span>
+            <span><i style="background:var(--good)"></i>acumulare &lt; −0.5</span>
+            <span><i style="background:var(--muted)"></i>neutru</span>
+            <span><i style="background:var(--bad)"></i>euforie &gt; 0.8</span>
           </p>
-
-          <div class="consola">
-            <div class="consola-cap"><span>J.A.R.V.I.S. // ASISTENT TRADING</span><span><i class="led warn"></i>OFFLINE</span></div>
-            <div class="mesaje" id="mesaje" aria-live="polite">
-              <div class="msg jarvis">Sisteme online. Monitorizez piața și cei doi boți. Modulul de conversație va fi activat în etapa finală — până atunci, toate datele sunt disponibile în panouri.</div>
-            </div>
-            <form id="form-chat">
-              <input id="intrebare" placeholder="Întreabă-l pe J.A.R.V.I.S. (se activează în etapa finală)…" autocomplete="off">
-              <button class="btn btn-mic" type="button" disabled title="Comenzi vocale - în etapa finală">🎙</button>
-              <button class="btn primar" type="submit">TRIMITE</button>
-            </form>
-          </div>
+          <details class="detalii">
+            <summary>Componente și sursa datelor</summary>
+            <div class="componente" id="componente"></div>
+            <p class="nota" id="nota-onchain"></p>
+          </details>
         </div>
 
         <div class="panel a-boti">
-          <h2>BOȚI // STATUS</h2>
+          <div class="cap-panou">
+            <h2>Boți</h2>
+            <button class="btn mic" data-mergi="boti">Control →</button>
+          </div>
           <div id="carduri-boti"><div class="incarcare">Se încarcă</div></div>
-          <p style="margin:14px 0 0"><button class="btn" data-mergi="boti">CONTROL BOȚI LIVE →</button></p>
+        </div>
+
+        <div class="ultima-stire a-stire" id="ultima-stire" aria-live="polite">
+          <span class="us-eticheta"><i class="led ok puls"></i>Ultima știre</span>
+          <span class="us-continut" id="us-continut"><span class="t2">Caut ultimele titluri…</span></span>
+          <button class="btn mic" data-mergi="stiri">Toate</button>
+        </div>
+
+        <div class="panel a-tv">
+          <div class="cap-panou">
+            <h2>Grafic · TradingView</h2>
+            <div class="actiuni">
+              <div class="segment" id="seg-tv">
+                <button data-simbol="BINANCE:BTCUSDT" class="activ">Spot</button><button data-simbol="BINANCE:BTCUSDT.P">Perpetual</button>
+              </div>
+            </div>
+          </div>
+          <div class="tv-wrap" id="tv-wrap"><div class="incarcare">Încarc graficul TradingView</div></div>
+          <p class="nota">Adaugi indicatori din butonul „Indicatori”, desenezi linii, schimbi intervalul sau perechea. Fără cont TradingView conectat, indicatorii adăugați nu se păstrează după reîncărcare.</p>
+        </div>
+
+        <div class="panel a-deriv">
+          <div class="cap-panou">
+            <h2>Derivate · BTCUSDT perpetual</h2>
+            <div class="actiuni">
+              <div class="segment" id="seg-deriv">
+                <button data-iv="15m">15m</button><button data-iv="1h" class="activ">1h</button><button data-iv="4h">4h</button>
+              </div>
+              <a class="btn mic" href="https://coinalyze.net/bitcoin/usd/binance/btcusdt_perp/price-chart-live/" target="_blank" rel="noopener noreferrer">Coinalyze ↗</a>
+            </div>
+          </div>
+          <div class="tiles" id="deriv-tiles"></div>
+          <div class="deriv-grafice" id="deriv-grafice">
+            <div class="deriv-rand pret"><span class="deriv-eticheta">Preț <b id="dv-pret">—</b></span><div class="grafic"><canvas id="g-dv-pret" aria-label="Preț BTC perpetual"></canvas></div></div>
+            <div class="deriv-rand"><span class="deriv-eticheta">Open Interest <b id="dv-oi">—</b></span><div class="grafic"><canvas id="g-dv-oi" aria-label="Open Interest"></canvas></div></div>
+            <div class="deriv-rand"><span class="deriv-eticheta">CVD <b id="dv-cvd">—</b></span><div class="grafic"><canvas id="g-dv-cvd" aria-label="CVD"></canvas></div></div>
+            <div class="deriv-rand"><span class="deriv-eticheta">Funding / 8h <b id="dv-funding">—</b></span><div class="grafic"><canvas id="g-dv-funding" aria-label="Funding rate"></canvas></div></div>
+            <div class="deriv-rand"><span class="deriv-eticheta">Long / short <b id="dv-ls">—</b></span><div class="grafic"><canvas id="g-dv-ls" aria-label="Raport long/short"></canvas></div></div>
+          </div>
+          <p class="nota">Date publice Binance Futures, actualizate la fiecare minut (15m = 5 zile, 1h și 4h = 29 zile). CVD = cumpărări agresive minus vânzări agresive (USD). Funding pozitiv = long-urile plătesc short-urile. Binance nu publică istoric de lichidări; pentru o estimare vezi Heatmap OI.</p>
         </div>
 
         <div class="panel a-grafice">
-          <h2>PIAȚĂ // ISTORIC</h2>
-          <div class="antet-grafic">
-            <span class="titlu-grafic">Preț BTC (închidere zilnică, USD)</span>
-            <div class="segment" id="seg-istoric"><button data-zile="90">90Z</button><button data-zile="365" class="activ">1 AN</button><button data-zile="2000">TOT</button></div>
+          <div class="cap-panou">
+            <h2>Istoric · preț și Master_Index</h2>
+            <div class="segment" id="seg-istoric"><button data-zile="90">90 zile</button><button data-zile="365" class="activ">1 an</button><button data-zile="2000">Tot</button></div>
           </div>
+          <div class="titlu-grafic">Preț BTC (închidere zilnică, USD)</div>
           <div class="grafic"><canvas id="g-pret" aria-label="Grafic preț BTC"></canvas></div>
-          <div class="antet-grafic" style="margin-top:14px"><span class="titlu-grafic">Master_Index (zonă verde = acumulare sub -0.5, roșie = euforie peste 0.8)</span></div>
+          <div class="titlu-grafic" style="margin-top:16px">Master_Index · verde = acumulare sub −0.5, roșu = euforie peste 0.8</div>
           <div class="grafic mic"><canvas id="g-master" aria-label="Grafic Master_Index"></canvas></div>
         </div>
 
         <div class="panel a-comparatie">
-          <h2>COMPARAȚIE STRATEGII // $10.000 INVESTIȚI</h2>
-          <div class="antet-grafic">
-            <span class="titlu-grafic" id="comparatie-perioada">—</span>
+          <div class="cap-panou">
+            <h2>Comparație strategii · $10.000</h2>
             <div class="legenda">
               <span><i style="background:var(--s-sdca)"></i>SDCA v2</span>
               <span><i style="background:var(--s-ai)"></i>AI Hedge Fund</span>
               <span><i style="background:var(--s-bh)"></i>Buy &amp; Hold</span>
             </div>
           </div>
+          <div class="titlu-grafic" id="comparatie-perioada">—</div>
           <div class="grafic mare"><canvas id="g-comparatie" aria-label="Curbele de capital ale strategiilor"></canvas></div>
           <div class="tabel-wrap" style="margin-top:14px">
             <table id="tabel-comparatie" aria-label="Statistici strategii"></table>
           </div>
           <p class="nota">▲ pe curba SDCA marchează tranzacțiile mari (front-load, vânzarea de 70%, moonbag, răscumpărare). Backtest cu comisioane și slippage, date on-chain întârziate 7 zile ca live. Rezultatele trecute nu garantează rezultate viitoare.</p>
+        </div>
+
+        <div class="panel a-asistent consola">
+          <div class="cap-panou"><h2>Asistent VEGA</h2><span class="stare-bot"><i class="led warn"></i>Offline</span></div>
+          <div class="mesaje" id="mesaje" aria-live="polite">
+            <div class="msg jarvis">Monitorizez piața și cei doi boți. Conversația se activează în etapa finală — până atunci, toate datele sunt în panouri.</div>
+          </div>
+          <form id="form-chat">
+            <input id="intrebare" placeholder="Întreabă ceva (etapa finală)…" autocomplete="off">
+            <button class="btn primar" type="submit">Trimite</button>
+          </form>
         </div>
       </div>
     </section>
@@ -159,14 +214,14 @@
     <!-- ================================================================ HEATMAP OI -->
     <section class="pagina" id="p-heatmap">
       <div class="panel">
-        <h2>HEATMAP LICHIDĂRI // OPEN INTEREST BINANCE</h2>
+        <h2>Heatmap lichidări · Open Interest Binance</h2>
         <p class="hm-live" id="hm-live"><i class="led"></i>—</p>
         <div class="antet-grafic">
           <div class="segment" id="seg-hm-interval">
-            <button data-iv="15m">15M · 5 ZILE</button><button data-iv="1h" class="activ">1H · 29 ZILE</button><button data-iv="4h">4H · 29 ZILE</button>
+            <button data-iv="15m">15m · 5 zile</button><button data-iv="1h" class="activ">1h · 29 zile</button><button data-iv="4h">4h · 29 zile</button>
           </div>
           <div class="segment" id="seg-hm-tip">
-            <button data-tip="toate" class="activ">LONG + SHORT</button><button data-tip="long">DOAR LONG</button><button data-tip="short">DOAR SHORT</button>
+            <button data-tip="toate" class="activ">Long + short</button><button data-tip="long">Long</button><button data-tip="short">Short</button>
           </div>
         </div>
         <div class="tiles" id="hm-tiles" style="margin:12px 0"></div>
@@ -180,16 +235,16 @@
           <span class="hm-linie-pret"><i></i>preț BTC (închidere)</span>
         </div>
       </div>
-      <div class="doua-col" style="margin-top:18px">
+      <div class="doua-col" style="margin-top:16px">
         <div class="panel">
-          <h2>NIVELURI MAGNET // UNDE STAU LICHIDĂRILE</h2>
+          <h2>Niveluri magnet · unde stau lichidările</h2>
           <div class="tabel-wrap"><table id="hm-clustere"></table></div>
           <p class="nota">Peste preț stau lichidările pozițiilor SHORT (prețul urcând acolo le forțează închiderea → cumpărări în cascadă); sub preț, ale pozițiilor LONG (vânzări în cascadă). Piața tinde adesea să „vâneze” zonele mari de lichiditate.</p>
         </div>
         <div class="panel">
-          <h2>OPEN INTEREST // BINANCE BTCUSDT</h2>
+          <h2>Open Interest · Binance BTCUSDT</h2>
           <div class="grafic mic"><canvas id="g-oi" aria-label="Open Interest în timp"></canvas></div>
-          <h3>CUM E CALCULAT</h3>
+          <h3>Cum e calculat</h3>
           <p class="t2" style="font-size:13.5px;margin:0" id="hm-model"></p>
         </div>
       </div>
@@ -198,8 +253,8 @@
     <!-- ================================================================ ȘTIRI -->
     <section class="pagina" id="p-stiri">
       <div class="cotatii" id="cotatii" aria-label="Cotații"></div>
-      <div class="panel" style="margin-top:18px">
-        <h2>ȘTIRI DE PIAȚĂ</h2>
+      <div class="panel" style="margin-top:16px">
+        <h2>Știri de piață</h2>
         <div class="antet-grafic">
           <div class="segment" id="seg-stiri">
             <button data-cat="toate" class="activ">Toate</button><button data-cat="btc">Bitcoin</button><button data-cat="aur">Aur</button><button data-cat="spx">S&amp;P 500</button><button data-cat="piete">Piețe</button>
@@ -207,24 +262,24 @@
           <span class="t2" id="stiri-stare" style="font-size:12.5px"></span>
         </div>
         <ul class="stiri" id="lista-stiri"><li class="incarcare">Caut ultimele titluri</li></ul>
-        <p class="nota">Titluri din Google News, Yahoo Finance, CoinDesk, Cointelegraph și CNBC (fluxuri RSS publice), din ultimele 3 zile, reîmprospătate la 5 minute. Linkurile deschid articolul original pe site-ul publicației. Cotațiile pentru aur și S&amp;P 500 vin de la Yahoo Finance, cu întârziere; bursa americană e închisă în afara programului.</p>
+        <p class="nota">Titluri din Google News, Yahoo Finance, CoinDesk, Cointelegraph și CNBC (fluxuri RSS publice), din ultimele 3 zile, reîmprospătate la 5 minute. Linkurile deschid articolul original. Cotațiile pentru aur și S&amp;P 500 vin de la Yahoo Finance, cu întârziere.</p>
       </div>
     </section>
 
     <!-- ================================================================ BACKTEST -->
     <section class="pagina" id="p-backtest">
       <div class="panel">
-        <h2>BACKTEST // LABORATOR</h2>
+        <h2>Backtest · laborator</h2>
         <form class="rand-controale" id="form-backtest">
-          <label class="camp">STRATEGIE
+          <label class="camp">Strategie
             <select id="bt-strategie">
               <option value="sdca">SDCA v2 (Master_Index)</option>
               <option value="ai">AI Hedge Fund (trend & momentum)</option>
             </select>
           </label>
-          <label class="camp">DATA DE START<input type="date" id="bt-start" value="2023-02-15"></label>
-          <label class="camp">CAPITAL ($)<input type="number" id="bt-capital" value="10000" min="10" step="any" required></label>
-          <button class="btn primar" type="submit" id="bt-ruleaza">▶ RULEAZĂ BACKTEST</button>
+          <label class="camp">Data de start<input type="date" id="bt-start" value="2023-02-15"></label>
+          <label class="camp">Capital ($)<input type="number" id="bt-capital" value="10000" min="10" step="any" required></label>
+          <button class="btn primar" type="submit" id="bt-ruleaza">▶ Rulează backtest</button>
         </form>
         <p class="nota" id="bt-nota">SDCA v2 are date on-chain complete din 2023-02-15; AI Hedge Fund poate porni din 2018-08-17.</p>
       </div>
@@ -234,11 +289,11 @@
 
   <div class="modal hidden" id="modal">
     <div class="panel">
-      <h2 id="modal-titlu">CONFIRMARE</h2>
+      <h2 id="modal-titlu">Confirmare</h2>
       <p id="modal-text"></p>
       <div class="rand-controale" style="justify-content:flex-end">
-        <button class="btn" id="modal-nu">ANULEAZĂ</button>
-        <button class="btn pericol" id="modal-da">CONFIRMĂ</button>
+        <button class="btn" id="modal-nu">Anulează</button>
+        <button class="btn pericol" id="modal-da">Confirmă</button>
       </div>
     </div>
   </div>

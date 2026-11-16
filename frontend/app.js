@@ -1,11 +1,11 @@
 /* =====================================================================
-   J.A.R.V.I.S. // BTC QUANT TERMINAL - logica interfeței
+   VEGA // BTC QUANT TERMINAL - logica interfeței
    Toate datele vin din serverul local (backend/api/server.py).
    ===================================================================== */
 'use strict';
 
-const CUL = { sdca: '#0aa5c2', ai: '#c47d14', bh: '#8f78e8', pret: '#38bdd8', text: '#d9f6ff', text2: '#92b8c7',
-              muted: '#5f7f8d', grila: 'rgba(0,225,255,0.07)', good: '#34d17e', bad: '#ff5a6e' };
+const CUL = { sdca: '#c6ff3d', ai: '#4cc9f0', bh: '#a78bfa', pret: '#c6ff3d', text: '#eef2ec', text2: '#a2aba0',
+              muted: '#687266', grila: 'rgba(255,255,255,0.05)', good: '#8fe04a', bad: '#ff5c7a' };
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const stare = { pagina: 'comanda', grafice: {}, zileIstoric: 365, boti: {}, date: {}, bt: null, filtruBt: 'toate' };
@@ -60,7 +60,7 @@ const mem = {
 function boot() {
   const el = $('#boot'), txt = $('#boot-text');
   if (mem.get('jarvis-boot') === 'vazut' || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('gata'); return; }
-  const linii = ['> J.A.R.V.I.S. // BTC QUANT TERMINAL v1.0', '> inițializare nucleu ............ OK',
+  const linii = ['> VEGA // BTC QUANT TERMINAL v1.0', '> inițializare nucleu ............ OK',
     '> conectare Binance Spot / Futures  OK', '> pipeline Master_Index ........... OK',
     '> date on-chain BGeometrics ....... OK', '> strategii: SDCA v2 · AI Hedge Fund', '> toate sistemele online.'];
   let i = 0;
@@ -98,7 +98,7 @@ const pluginCrosshair = {
     const t = chart.tooltip;
     if (!t || !t.getActiveElements().length) return;
     const x = t.getActiveElements()[0].element.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
-    ctx.save(); ctx.strokeStyle = 'rgba(0,225,255,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
   },
 };
@@ -110,7 +110,8 @@ const pluginEticheteFinal = {   // etichete directe la capătul fiecărei serii 
     chart.data.datasets.forEach((ds, i) => {
       const meta = chart.getDatasetMeta(i);
       if (meta.hidden || !meta.data.length) return;
-      const p = meta.data[meta.data.length - 1];
+      const p = meta.data[meta.data.length - 1], a = chart.chartArea;
+      if (!p || p.x > a.right + 1 || p.y < a.top - 1 || p.y > a.bottom + 1) return;   // ultimul punct e în afara zoom-ului
       pozitii.push({ y: p.y, x: p.x, text: `${ds.label} ${opt.format(ds.data[ds.data.length - 1])}`, cul: ds.borderColor });
     });
     pozitii.sort((a, b) => a.y - b.y);
@@ -153,8 +154,13 @@ function configGrafic(formatY, extra = {}) {
       interaction: { mode: 'index', intersect: false },
       layout: { padding: { right: extra.paddingDreapta || 8 } },
       scales: {
-        x: { grid: { color: CUL.grila, drawTicks: false }, border: { color: 'rgba(0,225,255,0.15)' },
-             ticks: { color: CUL.muted, maxTicksLimit: 7, maxRotation: 0, autoSkip: true, padding: 6, font: { family: 'JetBrains Mono', size: 10.5 } } },
+        x: { grid: { color: CUL.grila, drawTicks: false }, border: { color: 'rgba(255,255,255,0.10)' },
+             ticks: { color: CUL.muted, maxTicksLimit: window.innerWidth < 760 ? 4 : 7, maxRotation: 0,
+                      callback(v) {          // pe telefon: dată scurtă (12.11.25 sau 12.11 14h), ca etichetele să nu se suprapună
+                        const e = String(this.getLabelForValue(v));
+                        if (window.innerWidth >= 760 || !/^\d{4}-\d{2}-\d{2}/.test(e)) return e;
+                        return e.length > 10 ? `${e.slice(8, 10)}.${e.slice(5, 7)} ${e.slice(11, 13)}h` : `${e.slice(8, 10)}.${e.slice(5, 7)}.${e.slice(2, 4)}`;
+                      }, autoSkip: true, padding: 6, font: { family: 'JetBrains Mono', size: 10.5 } } },
         y: { grid: { color: CUL.grila, drawTicks: false }, border: { display: false },
              ticks: { color: CUL.muted, padding: 8, maxTicksLimit: 6, font: { family: 'JetBrains Mono', size: 10.5 }, callback: formatY },
              ...(extra.y || {}) },
@@ -162,13 +168,20 @@ function configGrafic(formatY, extra = {}) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(3,10,16,0.95)', borderColor: 'rgba(0,225,255,0.4)', borderWidth: 1, padding: 10,
+          backgroundColor: 'rgba(10,13,12,0.95)', borderColor: 'rgba(255,255,255,0.12)', borderWidth: 1, padding: 10, cornerRadius: 10,
           titleColor: CUL.text, bodyColor: CUL.text2, titleFont: { family: 'JetBrains Mono', size: 11.5 },
           bodyFont: { family: 'JetBrains Mono', size: 11.5 }, boxWidth: 10, boxHeight: 3, usePointStyle: false,
           callbacks: extra.tooltip || {},
         },
         eticheteFinal: extra.etichete || { activ: false },
         zone: extra.zone || {},
+        // Zoom pe axa timpului: Ctrl + rotița mouse-ului sau ciupire (telefon); trage pentru a muta;
+        // axa verticală se reajustează singură la datele vizibile, ca detaliile să se vadă.
+        zoom: {
+          zoom: { wheel: { enabled: true, modifierKey: 'ctrl', speed: 0.15 }, pinch: { enabled: true }, mode: 'x' },
+          pan: { enabled: true, mode: 'x', threshold: 5 },
+          limits: { x: { minRange: 6 } },
+        },
       },
       elements: { point: { radius: 0, hoverRadius: 4, hitRadius: 8 }, line: { borderWidth: 2, tension: 0 } },
     },
@@ -182,11 +195,46 @@ function deseneaza(id, cfgFn, date) {
   if (vechi) vechi.destroy();
   const cfg = cfgFn();
   cfg.data = date;
-  stare.grafice[id] = new Chart(document.getElementById(id), cfg);
+  const canvas = document.getElementById(id);
+  stare.grafice[id] = new Chart(canvas, cfg);
+  if (typeof stare.grafice[id].resetZoom === 'function') {        // pluginul de zoom s-a încărcat
+    adaugaZoomUI(canvas.parentElement, {
+      mareste: () => stare.grafice[id].zoom(1.4),
+      micsoreaza: () => stare.grafice[id].zoom(1 / 1.4),
+      reseteaza: () => stare.grafice[id].resetZoom(),
+    });
+    if (!canvas.dataset.zoomDblclick) {
+      canvas.dataset.zoomDblclick = '1';
+      canvas.addEventListener('dblclick', () => stare.grafice[id] && stare.grafice[id].resetZoom());
+    }
+  }
+}
+
+// Bara mică de zoom din colțul fiecărui grafic: + / − / resetare, plus un indiciu pentru mouse și telefon.
+// Se creează o singură dată pe container; acțiunile se actualizează la fiecare redesenare a graficului.
+function adaugaZoomUI(container, actiuni) {
+  container.classList.add('cu-zoom');
+  let bara = container.querySelector(':scope > .zoom-ui');
+  if (!bara) {
+    bara = document.createElement('div');
+    bara.className = 'zoom-ui';
+    bara.innerHTML = `
+      <span class="zoom-ajutor mouse">Ctrl + rotiță: zoom · trage: mută · dublu-click: resetare</span>
+      <span class="zoom-ajutor atingere">ciupește: zoom · trage: mută</span>
+      <button type="button" data-z="mareste" aria-label="Mărește (zoom in)" title="Mărește">+</button>
+      <button type="button" data-z="micsoreaza" aria-label="Micșorează (zoom out)" title="Micșorează">−</button>
+      <button type="button" data-z="reseteaza" aria-label="Arată tot intervalul" title="Arată tot intervalul">⟲</button>`;
+    bara.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-z]');
+      if (b && bara._actiuni) bara._actiuni[b.dataset.z]();
+    });
+    container.appendChild(bara);
+  }
+  bara._actiuni = actiuni;
 }
 
 const serie = (label, data, cul, extra = {}) => ({ label, data, borderColor: cul, backgroundColor: cul, pointBackgroundColor: cul,
-  pointBorderColor: '#08131d', pointBorderWidth: 2, ...extra });
+  pointBorderColor: '#0b0e0d', pointBorderWidth: 2, ...extra });
 
 // ----------------------------------------------------------------- PREȚ ÎN TIMP REAL (WebSocket Binance)
 // Browserul se conectează direct la fluxul public Binance (fără cheie): prețul vine la ~1 secundă, fără să
@@ -210,11 +258,15 @@ function afiseazaPret(p) {
     const elv = $('#variatie');
     elv.textContent = (p.variatie >= 0 ? '▲ ' : '▼ ') + pct(p.variatie, 2);
     elv.className = 'variatie ' + (p.variatie >= 0 ? 'sus' : 'jos');
+    const vm = $('#variatie-mini');
+    vm.textContent = pct(p.variatie, 2);
+    vm.className = p.variatie >= 0 ? 'sus' : 'jos';
   }
+  $('#pret-mini').textContent = usd(p.pret, 0);
   if (p.max != null) $('#max24').textContent = usd(p.max, 0);
   if (p.min != null) $('#min24').textContent = usd(p.min, 0);
   if (p.volum != null) $('#vol24').textContent = compact(p.volum);
-  document.title = `${usd(p.pret, 0)} · J.A.R.V.I.S.`;
+  document.title = `${usd(p.pret, 0)} · VEGA`;
 }
 
 function pornesteWS() {
@@ -255,10 +307,10 @@ function pazaWS() {   // dacă fluxul tace (rețea blocată, tab adormit), îl r
   if (ws && ws.readyState === WebSocket.OPEN && Date.now() - stare.live.ultimMesaj > 15000) ws.close();
 }
 
-// ----------------------------------------------------------------- REACTOR (instrumentul central)
+// ----------------------------------------------------------------- REACTOR MASTER_INDEX
 // Cadran de 270°: Master_Index de la -2 (stânga-jos) la +2 (dreapta-jos), cu zonele acumulare / neutru / euforie
-// și un ac indicator. Inelul exterior: cele 6 componente ale indexului; lungimea arcului = mărimea contribuției,
-// culoarea + semnul din etichetă = direcția (cyan pozitiv, chihlimbar negativ).
+// și un ac indicator. Inelul exterior: cele 6 componente; lungimea arcului = mărimea contribuției,
+// culoarea + semnul din etichetă = direcția (lime pozitiv, roșu negativ).
 const R_NUME = { Z_VWAP: 'VWAP', Z_MACD: 'MACD', Z_RSI: 'RSI', Z_Funding_Rate: 'FUNDING', Adjusted_MVRV: 'MVRV', Z_SOPR: 'SOPR' };
 
 function deseneazaReactor(m) {
@@ -275,14 +327,14 @@ function deseneazaReactor(m) {
   m.componente.forEach((c, i) => {
     const centru = i * 60, jum = 26 * Math.max(0.07, Math.min(1, Math.abs(c.contributie) / 0.4));
     const [x, y] = P(110, centru);
-    s += `<path class="r-pista" stroke-width="7" d="${arc(95, centru - 26, centru + 26)}"/>` +
-         `<path class="r-comp r-anim ${c.contributie < 0 ? 'neg' : 'poz'}" pathLength="1" stroke-width="7" d="${arc(95, centru - jum, centru + jum)}"/>` +
+    s += `<path class="r-pista" stroke-width="6" d="${arc(95, centru - 26, centru + 26)}"/>` +
+         `<path class="r-comp r-anim ${c.contributie < 0 ? 'neg' : 'poz'}" pathLength="1" stroke-width="6" d="${arc(95, centru - jum, centru + jum)}"/>` +
          `<text class="r-nume" x="${x.toFixed(1)}" y="${(y - 0.8).toFixed(1)}">${esc(R_NUME[c.cheie] || c.nume)}</text>` +
          `<text class="r-val" x="${x.toFixed(1)}" y="${(y + 6.2).toFixed(1)}">${(c.contributie >= 0 ? '+' : '−') + Math.abs(c.contributie).toFixed(2)}</text>`;
   });
 
   [[-2, m.prag_buy, 'acc'], [m.prag_buy, m.prag_sell, 'neu'], [m.prag_sell, 2, 'euf']].forEach(([a, b, cls]) => {
-    s += `<path class="r-zona r-anim ${cls}" pathLength="1" stroke-width="4.5" d="${arc(77, unghi(a) + 0.9, unghi(b) - 0.9)}"/>`;
+    s += `<path class="r-zona r-anim ${cls}" pathLength="1" stroke-width="4" d="${arc(77, unghi(a) + 1.5, unghi(b) - 1.5)}"/>`;
   });
   [-2, -1, 0, 1, 2].forEach(v => {
     const [x, y] = P(67, unghi(v));
@@ -368,13 +420,102 @@ async function incarcaCarduriBoti() {
   }
 }
 
+// ----------------------------------------------------------------- GRAFIC TRADINGVIEW (widget oficial, gratuit)
+// Widget-ul „Advanced Chart”: indicatori, desene, intervale și perechi la alegere, direct în pagină.
+function incarcaTradingView(simbol = 'BINANCE:BTCUSDT') {
+  const wrap = $('#tv-wrap');
+  wrap.innerHTML = '<div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div></div>';
+  const sc = document.createElement('script');
+  sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  sc.async = true;
+  sc.textContent = JSON.stringify({
+    autosize: true, symbol: simbol, interval: '240', timezone: 'Etc/UTC', theme: 'dark', style: '1', locale: 'ro',
+    backgroundColor: 'rgba(11, 14, 13, 1)', gridColor: 'rgba(255, 255, 255, 0.04)',
+    allow_symbol_change: true, hide_side_toolbar: false, calendar: false, withdateranges: true,
+    studies: ['STD;RSI', 'STD;MACD'], support_host: 'https://www.tradingview.com',
+  });
+  sc.onerror = () => { wrap.innerHTML = '<div class="incarcare">TradingView nu se poate încărca (verifică internetul).</div>'; };
+  wrap.querySelector('.tradingview-widget-container').appendChild(sc);
+}
+
+// ----------------------------------------------------------------- PANOU DERIVATE (stil Coinalyze, date Binance)
+// Cinci grafice suprapuse pe aceeași axă de timp: preț, Open Interest, CVD, funding, long/short.
+// Zoom-ul și deplasarea sunt sincronizate: mărești pe unul, se mișcă toate.
+const DV_GRAFICE = ['g-dv-pret', 'g-dv-oi', 'g-dv-cvd', 'g-dv-funding', 'g-dv-ls'];
+stare.dv = { iv: '1h', d: null };
+
+function sincronDv({ chart }) {
+  const { min, max } = chart.scales.x;
+  DV_GRAFICE.forEach(id => {
+    const g = stare.grafice[id];
+    if (g && g !== chart) g.zoomScale('x', { min, max }, 'none');
+  });
+}
+
+async function incarcaDerivate() {
+  try {
+    stare.dv.d = await api('/api/derivate?interval=' + stare.dv.iv);
+    deseneazaDerivate();
+  } catch (e) {
+    $('#deriv-tiles').innerHTML = `<div class="t2">Nu pot citi datele de derivate: ${esc(e.message)}</div>`;
+  }
+}
+
+function deseneazaDerivate() {
+  const d = stare.dv.d;
+  if (!d) return;
+  const r = d.rezumat, n = d.t.length;
+  const et = d.t.map(ms => new Date(ms).toISOString().slice(0, 16).replace('T', ' '));
+  // funding vine la 8 ore: fiecare interval primește ultima valoare publicată până atunci
+  let j = -1;
+  const fund = d.t.map(t => { while (j + 1 < d.funding.length && d.funding[j + 1].t <= t) j++; return j >= 0 ? d.funding[j].v : null; });
+  const semnat = v => (v >= 0 ? '+' : '−') + compact(Math.abs(v));
+
+  $('#deriv-tiles').innerHTML =
+    tile('Open Interest', compact(r.oi), `<span class="${semnCls(r.oi_var_24h)}">${pct(r.oi_var_24h, 2)}</span> în 24h`) +
+    tile('Funding / 8h', r.funding == null ? '—' : r.funding.toFixed(4) + '%', `${pct(r.funding_anual, 1)} pe an`, semnCls(r.funding)) +
+    tile('CVD 24h', semnat(r.cvd_24h), r.cvd_24h >= 0 ? 'domină cumpărătorii' : 'domină vânzătorii', semnCls(r.cvd_24h)) +
+    tile('Long / short', r.ls == null ? '—' : nr(r.ls, 2), r.ls == null ? '' : `${nr(r.ls / (1 + r.ls) * 100, 0)}% din conturi pe long`);
+
+  $('#dv-pret').textContent = usd(d.pret[n - 1], 0);
+  $('#dv-oi').textContent = compact(d.oi[n - 1]);
+  $('#dv-cvd').textContent = semnat(d.cvd[n - 1]);
+  $('#dv-funding').textContent = fund[n - 1] == null ? '—' : fund[n - 1].toFixed(4) + '%';
+  $('#dv-ls').textContent = d.ls[n - 1] == null ? '—' : nr(d.ls[n - 1], 2);
+
+  const rand = (id, formatY, serii, extra = {}) => deseneaza(id, () => {
+    const cfg = configGrafic(formatY, { tooltip: extra.tooltip });
+    if (extra.tip) cfg.type = extra.tip;
+    cfg.options.animation = false;
+    cfg.options.layout.padding = { right: 8, top: 22 };
+    cfg.options.scales.x.ticks.display = id === DV_GRAFICE[DV_GRAFICE.length - 1];   // datele doar sub ultimul grafic
+    cfg.options.scales.y.afterFit = ax => { ax.width = 70; };                         // axe aliniate pe verticală
+    cfg.options.scales.y.ticks.maxTicksLimit = id === 'g-dv-pret' ? 6 : 3;
+    cfg.options.plugins.zoom.zoom.onZoomComplete = sincronDv;
+    cfg.options.plugins.zoom.pan.onPanComplete = sincronDv;
+    return cfg;
+  }, { labels: et, datasets: serii });
+
+  rand('g-dv-pret', v => '$' + nr(v / 1000, 1) + 'k', [serie('Preț', d.pret, CUL.pret, { borderWidth: 1.6,
+    fill: { target: 'origin', above: 'rgba(198,255,61,0.06)' } })], { tooltip: { label: c => ' Preț: ' + usd(c.parsed.y, 0) } });
+  rand('g-dv-oi', v => '$' + nr(v / 1e9, 2) + 'B', [serie('Open Interest', d.oi, CUL.bh, { borderWidth: 1.6 })],
+    { tooltip: { label: c => ' OI: ' + compact(c.parsed.y) } });
+  rand('g-dv-cvd', v => (v < 0 ? '−$' : '$') + nr(Math.abs(v) / 1e6, 0) + 'M', [serie('CVD', d.cvd, CUL.ai, { borderWidth: 1.6 })],
+    { tooltip: { label: c => ' CVD: ' + semnat(c.parsed.y) } });
+  rand('g-dv-funding', v => v.toFixed(3) + '%', [{ label: 'Funding', data: fund, borderWidth: 0, barPercentage: 1, categoryPercentage: 1,
+    backgroundColor: fund.map(v => v == null ? 'transparent' : v >= 0 ? 'rgba(52,209,126,0.55)' : 'rgba(255,90,110,0.6)') }],
+    { tip: 'bar', tooltip: { label: c => ' Funding: ' + (c.parsed.y == null ? '—' : c.parsed.y.toFixed(4) + '% / 8h') } });
+  rand('g-dv-ls', v => v.toFixed(2), [serie('Long/short', d.ls, CUL.sdca, { borderWidth: 1.6 })],
+    { tooltip: { label: c => ' Long/short: ' + nr(c.parsed.y, 2) } });
+}
+
 // ----------------------------------------------------------------- grafice istoric
 async function incarcaIstoric() {
   try {
     const d = await api('/api/istoric?zile=' + stare.zileIstoric);
     deseneaza('g-pret', () => configGrafic(v => '$' + nr(v / 1000, 0) + 'k', {
       tooltip: { label: c => ' Preț: ' + usd(c.parsed.y, 0) } }),
-      { labels: d.data, datasets: [serie('Preț BTC', d.pret, CUL.pret, { fill: { target: 'origin', above: 'rgba(56,189,216,0.06)' } })] });
+      { labels: d.data, datasets: [serie('Preț BTC', d.pret, CUL.pret, { fill: { target: 'origin', above: 'rgba(198,255,61,0.06)' } })] });
     deseneaza('g-master', () => configGrafic(v => v.toFixed(1), {
       zone: { buy: d.prag_buy, sell: d.prag_sell },
       tooltip: { label: c => ' Master_Index: ' + c.parsed.y.toFixed(2) } }),
@@ -586,6 +727,9 @@ async function incarcaHeatmap() {
   if (!stare.hm.d) $('#hm-incarcare').classList.remove('hidden');   // la reîmprospătări nu mai acoperim harta
   try {
     const d = await api('/api/heatmap?interval=' + stare.hm.iv);
+    // la reîmprospătare păstrăm zoom-ul; dacă fereastra era lipită de prezent, o mutăm odată cu lumânările noi
+    const Tvechi = stare.hm.d && stare.hm.d.timp.length, v = stare.hm.view;
+    if (v && Tvechi && v.t1 === Tvechi - 1) { const dif = d.timp.length - Tvechi; v.t0 += dif; v.t1 += dif; }
     stare.hm.d = d;
     stare.hm.calculatLa = Date.now();
     const s = d.sumar;
@@ -606,7 +750,7 @@ async function incarcaHeatmap() {
       Nivelurile dispar când prețul trece prin ele, iar scăderile de OI le reduc proporțional. <b>Estimare</b>, nu date exacte:
       levierul real al traderilor nu e public. Sursa: ${esc(d.model.sursa)}.`;
     deseneaza('g-oi', () => configGrafic(v => '$' + v.toFixed(1) + 'B', { tooltip: { label: c => ' Open Interest: $' + c.parsed.y.toFixed(2) + 'B' } }),
-      { labels: d.timp, datasets: [serie('Open Interest', d.oi, CUL.pret, { fill: { target: 'origin', above: 'rgba(56,189,216,0.06)' } })] });
+      { labels: d.timp, datasets: [serie('Open Interest', d.oi, CUL.pret, { fill: { target: 'origin', above: 'rgba(198,255,61,0.06)' } })] });
     deseneazaHeatmap();
   } catch (e) {
     toast('Heatmap indisponibil: ' + e.message, true);
@@ -625,16 +769,60 @@ function deseneazaHeatmap() {
   const m = { st: W < 500 ? 52 : 66, dr: 10, sus: 10, jos: 26 };
   const pw = W - m.st - m.dr, ph = H - m.sus - m.jos;
   const T = d.timp.length, N = d.niveluri.length;
+  const { off, vmax } = imagineHeatmap(d, T, N);
+  $('#hm-max').textContent = 'mai multe (≥ ' + compact(vmax * 1000) + ' / nivel)';
 
-  // valorile afișate (după filtru) și scala de culoare (percentila 99 -> evităm ca un singur nivel extrem să "stingă" restul)
+  // fereastra vizibilă (zoom): intervalul de lumânări t0..t1 și de niveluri de preț i0..i1
+  const v = vedereHm(T, N), nT = v.t1 - v.t0 + 1, nI = v.i1 - v.i0 + 1;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, v.t0, N - 1 - v.i1, nT, nI, m.st, m.sus, pw, ph);
+
+  const jos = d.niveluri[v.i0] - d.pas_nivel / 2, sus = d.niveluri[v.i1] + d.pas_nivel / 2;
+  const y = pret => m.sus + ph * (1 - (pret - jos) / (sus - jos));
+  const x = t => m.st + pw * (t - v.t0 + 0.5) / nT;
+
+  // axa de preț + grilă (pasul se micșorează odată cu zoom-ul)
+  ctx.font = '10.5px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
+  const pasPret = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000].find(p => (sus - jos) / p <= 9) || 20000;
+  for (let p = Math.ceil(jos / pasPret) * pasPret; p <= sus; p += pasPret) {
+    ctx.strokeStyle = 'rgba(0,225,255,0.06)'; ctx.beginPath(); ctx.moveTo(m.st, y(p)); ctx.lineTo(m.st + pw, y(p)); ctx.stroke();
+    ctx.fillStyle = CUL.muted; ctx.fillText('$' + nr(p / 1000, pasPret < 1000 ? 1 : 0) + 'k', m.st - 6, y(p));
+  }
+  // axa de timp (cu oră când fereastra e scurtă)
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const cuOra = stare.hm.iv === '15m' || nT < 60;
+  const nrEt = W < 500 ? 3 : 6;
+  for (let k = 0; k < nrEt; k++) {
+    const t = v.t0 + Math.round((nT - 1) * (k + 0.5) / nrEt);
+    ctx.fillStyle = CUL.muted; ctx.fillText(d.timp[t].slice(5, cuOra ? 16 : 10), x(t), m.sus + ph + 7);
+  }
+  // linia prețului + prețul curent, decupate la zona hărții
+  ctx.save(); ctx.beginPath(); ctx.rect(m.st, m.sus, pw, ph); ctx.clip();
+  ctx.strokeStyle = CUL_PRET_HM; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let t = Math.max(0, v.t0 - 1); t <= Math.min(T - 1, v.t1 + 1); t++) {
+    const p = d.pret.close[t];
+    t > Math.max(0, v.t0 - 1) ? ctx.lineTo(x(t), y(p)) : ctx.moveTo(x(t), y(p));
+  }
+  ctx.stroke();
+  const yc = y(d.pret_curent);
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,181,71,0.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(m.st, yc); ctx.lineTo(m.st + pw, yc); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+
+  stare.hm.geom = { m, pw, ph, T, N, jos, sus, v };
+}
+
+// Imaginea completă T×N a hărții (un pixel pe celulă) și scala de culoare; se recalculează doar când se schimbă
+// datele sau filtrul, așa că zoom-ul și mutarea doar decupează din ea (rapid).
+function imagineHeatmap(d, T, N) {
+  const c = stare.hm.imagine;
+  if (c && c.d === d && c.tip === stare.hm.tip) return c;
   const val = (t, i) => (stare.hm.tip !== 'short' ? d.long_k[t][i] : 0) + (stare.hm.tip !== 'long' ? d.short_k[t][i] : 0);
   const toate = [];
   for (let t = 0; t < T; t++) for (let i = 0; i < N; i++) { const v = val(t, i); if (v > 0) toate.push(v); }
   toate.sort((a, b) => a - b);
+  // percentila 99: un singur nivel extrem nu "stinge" restul hărții
   const vmax = toate.length ? toate[Math.floor(toate.length * 0.99)] : 1;
-  $('#hm-max').textContent = 'mai multe (≥ ' + compact(vmax * 1000) + ' / nivel)';
-
-  // celulele: desenate într-o imagine T×N, apoi scalate fără netezire
   const img = new ImageData(T, N);
   for (let t = 0; t < T; t++) for (let i = 0; i < N; i++) {
     const v = val(t, i), p = ((N - 1 - i) * T + t) * 4;
@@ -644,45 +832,84 @@ function deseneazaHeatmap() {
   }
   const off = document.createElement('canvas'); off.width = T; off.height = N;
   off.getContext('2d').putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(off, m.st, m.sus, pw, ph);
+  return (stare.hm.imagine = { d, tip: stare.hm.tip, off, vmax });
+}
 
-  const jos = d.niveluri[0] - d.pas_nivel / 2, sus = d.niveluri[N - 1] + d.pas_nivel / 2;
-  const y = pret => m.sus + ph * (1 - (pret - jos) / (sus - jos));
-  const x = t => m.st + pw * (t + 0.5) / T;
+// ----------------------------------------------------------------- zoom heatmap
+const HM_MIN_T = 12, HM_MIN_N = 10;
 
-  // axa de preț + grilă
-  ctx.font = '10.5px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
-  const pasPret = [500, 1000, 2000, 2500, 5000, 10000].find(p => (sus - jos) / p <= 9) || 20000;
-  for (let p = Math.ceil(jos / pasPret) * pasPret; p <= sus; p += pasPret) {
-    ctx.strokeStyle = 'rgba(0,225,255,0.06)'; ctx.beginPath(); ctx.moveTo(m.st, y(p)); ctx.lineTo(m.st + pw, y(p)); ctx.stroke();
-    ctx.fillStyle = CUL.muted; ctx.fillText('$' + nr(p / 1000, pasPret < 1000 ? 1 : 0) + 'k', m.st - 6, y(p));
-  }
-  // axa de timp
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  const nrEt = W < 500 ? 3 : 6;
-  for (let k = 0; k < nrEt; k++) {
-    const t = Math.round((T - 1) * (k + 0.5) / nrEt);
-    ctx.fillStyle = CUL.muted; ctx.fillText(d.timp[t].slice(5, stare.hm.iv === '15m' ? 16 : 10), x(t), m.sus + ph + 7);
-  }
-  // linia prețului + prețul curent
-  ctx.strokeStyle = CUL_PRET_HM; ctx.lineWidth = 1.5; ctx.beginPath();
-  d.pret.close.forEach((p, t) => t ? ctx.lineTo(x(t), y(p)) : ctx.moveTo(x(t), y(p)));
-  ctx.stroke();
-  const yc = y(d.pret_curent);
-  ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,181,71,0.55)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(m.st, yc); ctx.lineTo(m.st + pw, yc); ctx.stroke(); ctx.setLineDash([]);
+function vedereHm(T, N) {   // fereastra curentă, limitată la date (null = toată harta)
+  const v = stare.hm.view;
+  if (!v) return { t0: 0, t1: T - 1, i0: 0, i1: N - 1 };
+  const nT = Math.min(T, Math.max(HM_MIN_T, v.t1 - v.t0 + 1)), nI = Math.min(N, Math.max(HM_MIN_N, v.i1 - v.i0 + 1));
+  const t0 = Math.max(0, Math.min(T - nT, v.t0)), i0 = Math.max(0, Math.min(N - nI, v.i0));
+  return { t0, t1: t0 + nT - 1, i0, i1: i0 + nI - 1 };
+}
 
-  stare.hm.geom = { m, pw, ph, T, N, jos, sus };
+function seteazaVedereHm(t0, nT, i0, nI) {
+  const d = stare.hm.d, T = d.timp.length, N = d.niveluri.length;
+  nT = Math.round(Math.min(T, Math.max(HM_MIN_T, nT))); nI = Math.round(Math.min(N, Math.max(HM_MIN_N, nI)));
+  t0 = Math.round(Math.max(0, Math.min(T - nT, t0))); i0 = Math.round(Math.max(0, Math.min(N - nI, i0)));
+  stare.hm.view = nT === T && nI === N ? null : { t0, t1: t0 + nT - 1, i0, i1: i0 + nI - 1 };
+  deseneazaHeatmap();
+}
+
+// factor > 1 = mărire; (fx, fy) = punctul care rămâne pe loc, ca fracție din zona hărții (implicit centrul)
+function zoomHm(factor, fx = 0.5, fy = 0.5) {
+  const d = stare.hm.d;
+  if (!d) return;
+  const v = vedereHm(d.timp.length, d.niveluri.length), nT = v.t1 - v.t0 + 1, nI = v.i1 - v.i0 + 1;
+  const nT2 = nT / factor, nI2 = nI / factor;
+  seteazaVedereHm(v.t0 + fx * nT - fx * nT2, nT2, v.i0 + (1 - fy) * nI - (1 - fy) * nI2, nI2);
+  $('#hm-tooltip').classList.add('hidden');
+}
+
+function initZoomHeatmap() {
+  const cnv = $('#hm-canvas');
+  const fractie = ev => {
+    const g = stare.hm.geom, r = cnv.getBoundingClientRect();
+    if (!g) return [0.5, 0.5];
+    return [Math.min(1, Math.max(0, (ev.clientX - r.left - g.m.st) / g.pw)), Math.min(1, Math.max(0, (ev.clientY - r.top - g.m.sus) / g.ph))];
+  };
+  cnv.addEventListener('wheel', ev => {           // Ctrl + rotiță: zoom în jurul cursorului (fără Ctrl, pagina se derulează normal)
+    if (!ev.ctrlKey || !stare.hm.d) return;
+    ev.preventDefault();
+    zoomHm(ev.deltaY < 0 ? 1.25 : 0.8, ...fractie(ev));
+  }, { passive: false });
+  cnv.addEventListener('dblclick', () => { stare.hm.view = null; deseneazaHeatmap(); });
+
+  let tras = null;                                 // trage cu mouse-ul / degetul: mută fereastra
+  cnv.addEventListener('pointerdown', ev => {
+    if (!stare.hm.d || !stare.hm.geom || ev.button !== 0) return;
+    tras = { x: ev.clientX, y: ev.clientY, v: vedereHm(stare.hm.d.timp.length, stare.hm.d.niveluri.length), activ: false };
+    cnv.setPointerCapture(ev.pointerId);
+  });
+  cnv.addEventListener('pointermove', ev => {
+    if (!tras) return;
+    const dx = ev.clientX - tras.x, dy = ev.clientY - tras.y;
+    if (!tras.activ && Math.hypot(dx, dy) < 5) return;
+    tras.activ = true; cnv.classList.add('se-muta'); $('#hm-tooltip').classList.add('hidden');
+    const g = stare.hm.geom, v = tras.v, nT = v.t1 - v.t0 + 1, nI = v.i1 - v.i0 + 1;
+    seteazaVedereHm(v.t0 - dx / g.pw * nT, nT, v.i0 + dy / g.ph * nI, nI);
+  });
+  const opreste = () => { tras = null; cnv.classList.remove('se-muta'); };
+  cnv.addEventListener('pointerup', opreste);
+  cnv.addEventListener('pointercancel', opreste);
+
+  adaugaZoomUI($('#hm-wrap'), {
+    mareste: () => zoomHm(1.5), micsoreaza: () => zoomHm(1 / 1.5),
+    reseteaza: () => { stare.hm.view = null; deseneazaHeatmap(); },
+  });
 }
 
 function hoverHeatmap(ev) {
   const g = stare.hm.geom, d = stare.hm.d, tip = $('#hm-tooltip');
-  if (!g || !d) return;
+  if (!g || !d || $('#hm-canvas').classList.contains('se-muta')) return;
   const r = $('#hm-canvas').getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
   if (mx < g.m.st || mx > g.m.st + g.pw || my < g.m.sus || my > g.m.sus + g.ph) { tip.classList.add('hidden'); return; }
-  const t = Math.min(g.T - 1, Math.floor((mx - g.m.st) / g.pw * g.T));
-  const i = Math.min(g.N - 1, Math.floor((1 - (my - g.m.sus) / g.ph) * g.N));
+  const nT = g.v.t1 - g.v.t0 + 1, nI = g.v.i1 - g.v.i0 + 1;
+  const t = Math.min(g.v.t1, g.v.t0 + Math.floor((mx - g.m.st) / g.pw * nT));
+  const i = Math.min(g.v.i1, g.v.i0 + Math.floor((1 - (my - g.m.sus) / g.ph) * nI));
   const lo = d.niveluri[i] - d.pas_nivel / 2, hi = d.niveluri[i] + d.pas_nivel / 2;
   tip.innerHTML = `<b>${esc(d.timp[t])} UTC</b><br>nivel ${usd(lo, 0)} – ${usd(hi, 0)}<br>
     lichidări LONG est.: <b>${compact(d.long_k[t][i] * 1000)}</b><br>lichidări SHORT est.: <b>${compact(d.short_k[t][i] * 1000)}</b><br>
@@ -869,18 +1096,16 @@ async function trimiteIntrebare(ev) {
   const q = $('#intrebare').value.trim();
   if (!q) return;
   adaugaMesaj(q, 'tu'); $('#intrebare').value = '';
-  $('#reactor').classList.add('vorbeste');
   try {
     const r = await post('/api/chat', { mesaj: q });
     adaugaMesaj(r.raspuns || '', 'jarvis');
   } catch (e) { adaugaMesaj(e.message, 'sistem'); }
-  finally { setTimeout(() => $('#reactor').classList.remove('vorbeste'), 900); }
 }
 
 // ----------------------------------------------------------------- actualizare date
 async function actualizeazaDate() {
   const b = $('#btn-actualizeaza');
-  b.disabled = true; b.textContent = '⟳ SE ACTUALIZEAZĂ…';
+  b.disabled = true; b.querySelector('.txt').textContent = 'Se actualizează…';
   try {
     await post('/api/actualizeaza');
     let s;
@@ -892,7 +1117,7 @@ async function actualizeazaDate() {
     stare.versiuneDate = null;   // versiunea nouă se preia la următoarea verificare, fără notificare dublă
     verificaStatus();
   } catch (e) { toast('Actualizarea a eșuat: ' + e.message, true); }
-  finally { b.disabled = false; b.textContent = '⟳ ACTUALIZEAZĂ DATE'; }
+  finally { b.disabled = false; b.querySelector('.txt').textContent = 'Actualizează date'; }
 }
 
 function reincarcaTot() {
@@ -929,7 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
   boot();
   ceas(); setInterval(ceas, 1000);
   if (typeof Chart !== 'undefined') {
-    Chart.defaults.font.family = '"Chakra Petch", sans-serif';
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = CUL.text2;
   } else {
     toast('Librăria de grafice nu s-a încărcat (verifică internetul). Restul platformei funcționează.', true);
@@ -946,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $$('#seg-hm-interval button').forEach(b => b.addEventListener('click', () => {
     stare.hm.iv = b.dataset.iv;
     stare.hm.d = null;   // alt interval -> date noi; arătăm indicatorul de încărcare
+    stare.hm.view = null;
     $$('#seg-hm-interval button').forEach(x => x.classList.toggle('activ', x === b));
     incarcaHeatmap();
   }));
@@ -955,13 +1181,26 @@ document.addEventListener('DOMContentLoaded', () => {
     deseneazaHeatmap();
   }));
   $('#hm-canvas').addEventListener('mousemove', hoverHeatmap);
+  initZoomHeatmap();
   $('#hm-canvas').addEventListener('mouseleave', () => $('#hm-tooltip').classList.add('hidden'));
   let tRedim, eraIngust = window.innerWidth < 760;
   window.addEventListener('resize', () => { clearTimeout(tRedim); tRedim = setTimeout(() => {
     if (stare.pagina === 'heatmap') deseneazaHeatmap();
     const ingust = window.innerWidth < 760;      // graficele își aleg etichetele după lățime: le refacem la trecerea pragului
-    if (ingust !== eraIngust) { eraIngust = ingust; incarcaIstoric(); incarcaComparatie(); if (stare.bt) afiseazaBacktest(); }
+    if (ingust !== eraIngust) { eraIngust = ingust; incarcaIstoric(); incarcaComparatie(); deseneazaDerivate(); if (stare.bt) afiseazaBacktest(); }
   }, 150); });
+  $$('#seg-tv button').forEach(b => b.addEventListener('click', () => {
+    $$('#seg-tv button').forEach(x => x.classList.toggle('activ', x === b));
+    incarcaTradingView(b.dataset.simbol);
+  }));
+  $$('#seg-deriv button').forEach(b => b.addEventListener('click', () => {
+    stare.dv.iv = b.dataset.iv;
+    $$('#seg-deriv button').forEach(x => x.classList.toggle('activ', x === b));
+    incarcaDerivate();
+  }));
+  incarcaTradingView();
+  incarcaDerivate();
+  setInterval(() => { if (stare.pagina === 'comanda' && !document.hidden) incarcaDerivate(); }, 60000);
   $('#form-backtest').addEventListener('submit', ruleazaBacktest);
   $('#bt-strategie').addEventListener('change', e => { $('#bt-start').value = e.target.value === 'sdca' ? '2023-02-15' : '2018-08-17'; });
   $('#form-chat').addEventListener('submit', trimiteIntrebare);
