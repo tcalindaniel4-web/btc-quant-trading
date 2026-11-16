@@ -20,6 +20,7 @@ backend/logs/
 # --- Starea portofoliilor virtuale (se schimbă la fiecare ciclu al boților) ---
 backend/strategii/sdca/bot_state*.json
 backend/strategii/sdca/alpaca_jurnal.jsonl
+backend/strategii/sdca/jurnal_live.csv
 backend/strategii/ai_hedgefund/stare_live*.json
 
 # --- Sistem / editor ---

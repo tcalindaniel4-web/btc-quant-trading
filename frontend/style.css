@@ -182,15 +182,26 @@ main { position: relative; z-index: 1;
   grid-template-areas:
     "stire stire stire"
     "piata semnal boti"
+    "piata asistent boti"
     "tv tv tv"
     "deriv deriv deriv"
     "grafice grafice grafice"
-    "comparatie comparatie comparatie"
-    "asistent asistent asistent"; }
+    "comparatie comparatie comparatie"; }
 .a-piata { grid-area: piata; } .a-semnal { grid-area: semnal; } .a-boti { grid-area: boti; } .a-stire { grid-area: stire; }
 .a-tv { grid-area: tv; } .a-deriv { grid-area: deriv; } .a-grafice { grid-area: grafice; }
 .a-comparatie { grid-area: comparatie; } .a-asistent { grid-area: asistent; }
 .doua-col { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.a-piata, .a-boti { align-self: start; }
+
+/* grafic live per bot (TradingView Lightweight Charts) */
+.lw-cap { margin-top: 4px; }
+.lw-cap h3 { margin: 0; }
+.lw-wrap { position: relative; height: 340px; margin-top: 8px; border-radius: 12px; overflow: hidden;
+  background: rgba(255, 255, 255, .02); border: 1px solid rgba(255, 255, 255, .06); }
+.lw-wrap .incarcare, .lw-wrap .t2 { position: absolute; inset: 0; display: grid; place-items: center; }
+.lw-legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.lw-buy { color: var(--good); } .lw-sell { color: var(--bad); } .lw-mediu { color: var(--s-sdca); }
+@media (max-width: 760px) { .lw-wrap { height: 280px; } }
 
 /* ------------------------------------------------------------- carduri */
 /* Sticlă întunecată cu o muchie de lumină lime care se aprinde la hover. */
@@ -419,7 +430,7 @@ tr:hover td { background: rgba(198, 255, 61, .03); }
 .terminal .tranz { color: var(--good); }
 
 /* ------------------------------------------------------------- asistent */
-.mesaje { height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 14px; margin-bottom: 10px; }
+.mesaje { height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 14px; margin-bottom: 10px; }
 .msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; animation: intra .3s ease both; }
 .msg.jarvis { align-self: flex-start; background: rgba(198, 255, 61, .06); border: 1px solid rgba(198, 255, 61, .15); }
 .msg.tu { align-self: flex-end; background: var(--surface-2); }
@@ -490,7 +501,7 @@ tr:hover td { background: rgba(198, 255, 61, .03); }
 }
 @media (max-width: 1100px) {
   .grid-comanda { grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas: "stire stire" "semnal piata" "semnal boti" "tv tv" "deriv deriv" "grafice grafice" "comparatie comparatie" "asistent asistent"; }
+    grid-template-areas: "stire stire" "semnal piata" "semnal boti" "asistent asistent" "tv tv" "deriv deriv" "grafice grafice" "comparatie comparatie"; }
   nav.tabs button { padding: 8px 10px; }
   .ceas { display: none; }
 }
@@ -534,7 +545,7 @@ tr:hover td { background: rgba(198, 255, 61, .03); }
   main { padding: 12px calc(12px + env(safe-area-inset-right)) calc(24px + var(--bara-jos) + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); }
   .grid-comanda, .doua-col { gap: 12px; }
   .grid-comanda { grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "stire" "piata" "semnal" "boti" "tv" "deriv" "grafice" "comparatie" "asistent"; }
+    grid-template-areas: "stire" "piata" "semnal" "asistent" "boti" "tv" "deriv" "grafice" "comparatie"; }
   .doua-col { grid-template-columns: minmax(0, 1fr); }
   .panel { padding: 14px; border-radius: 14px; }
   .panel:hover { box-shadow: none; }
@@ -583,7 +594,7 @@ tr:hover td { background: rgba(198, 255, 61, .03); }
 
   .jurnal { max-height: 70vh; }
   .terminal { height: 280px; font-size: 11px; }
-  .mesaje { height: 100px; }
+  .mesaje { height: 260px; }
   .nota { font-size: 12px; }
 }
 @media (max-width: 340px) {

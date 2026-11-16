@@ -6,8 +6,8 @@
   <title>VEGA Quant Terminal</title>
   <!-- Aplicație pe ecranul principal (iPhone: Safari → Partajare → „Adaugă pe ecranul principal”) -->
   <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+  <link rel="icon" type="image/png" href="icon-192.png?v=2">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="VEGA">
@@ -20,6 +20,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js" defer></script>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -193,12 +194,12 @@
         </div>
 
         <div class="panel a-asistent consola">
-          <div class="cap-panou"><h2>Asistent VEGA</h2><span class="stare-bot"><i class="led warn"></i>Offline</span></div>
+          <div class="cap-panou"><h2>Vega · asistent</h2><span class="stare-bot" id="stare-vega"><i class="led warn"></i>Offline</span></div>
           <div class="mesaje" id="mesaje" aria-live="polite">
-            <div class="msg jarvis">Monitorizez piața și cei doi boți. Conversația se activează în etapa finală — până atunci, toate datele sunt în panouri.</div>
+            <div class="msg jarvis">Sunt Vega. Urmăresc piața, Master_Index-ul și cei doi boți. Conversația pornește după ce cheia API Anthropic e pusă în .env.</div>
           </div>
           <form id="form-chat">
-            <input id="intrebare" placeholder="Întreabă ceva (etapa finală)…" autocomplete="off">
+            <input id="intrebare" placeholder="Întreabă-l pe Vega…" autocomplete="off">
             <button class="btn primar" type="submit">Trimite</button>
           </form>
         </div>

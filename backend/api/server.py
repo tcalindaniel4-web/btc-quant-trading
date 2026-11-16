@@ -14,7 +14,7 @@ Expune datele existente ale proiectului, FĂRĂ să dubleze logica strategiilor:
   GET  /api/boti/<bot>/log    ultimele linii din log-ul botului
   POST /api/actualizeaza descarcă date noi (pipeline + date AI), în fundal
   GET  /api/status       versiunea datelor + starea actualizării automate (pipeline la 60 min, AI zilnic)
-  POST /api/chat         asistentul - se activează în etapa finală (cheie Anthropic)
+  POST /api/chat         asistentul Vega (Google Gemini, cheia GEMINI_API_KEY din .env)
 
 Pornire (din folderul proiectului):
   venv\\Scripts\\python.exe backend\\api\\server.py      ->  http://127.0.0.1:8000
@@ -58,6 +58,7 @@ import control_boti  # noqa: E402
 import heatmap_oi  # noqa: E402
 import derivate  # noqa: E402
 import stiri  # noqa: E402
+import asistent_vega  # noqa: E402
 
 SDCA_STARE = BACKEND_DIR / 'strategii' / 'sdca' / 'bot_state.json'
 START_COMPARATIE = bt_sdca.START_IMPLICIT   # prima zi cu toate datele on-chain
@@ -448,6 +449,27 @@ def bot_reseteaza(bot: str):
     return _executa(control_boti.reseteaza, bot)
 
 
+JURNAL_SDCA = SDCA_STARE.parent / 'jurnal_live.csv'
+
+
+@app.get("/api/boti/{bot}/tranzactii")
+def bot_tranzactii(bot: str):
+    """Tranzacțiile live ale botului, pentru marcajele de pe graficul din BOȚI LIVE (ora locală a serverului)."""
+    _bot_valid(bot)
+    cale = JURNAL_SDCA if bot == 'sdca' else bot_live_ai.JURNAL
+    if not cale.exists():
+        return {'tranzactii': [], 'pret_mediu': None}
+    j = pd.read_csv(cale)
+    timp = pd.to_datetime(j['Executat_la']).dt.tz_localize(datetime.now().astimezone().tzinfo)
+    j['t'] = ((timp - pd.Timestamp(0, tz='UTC')) // pd.Timedelta(seconds=1)).astype(int)   # independent de rezoluție
+    coloane = [c for c in ('t', 'Executat_la', 'Actiune', 'Pret', 'Suma_USD', 'Motiv') if c in j.columns]
+    pret_mediu = None
+    stare = citeste_json(SDCA_STARE if bot == 'sdca' else bot_live_ai.STARE)
+    if bot == 'sdca' and stare and stare['btc'] > 0:
+        pret_mediu = stare['total_investit'] / stare['btc']
+    return curat({'tranzactii': j[coloane].to_dict('records'), 'pret_mediu': pret_mediu})
+
+
 @app.get("/api/boti/{bot}/log")
 def bot_log(bot: str, linii: int = 250):
     _bot_valid(bot)
@@ -546,13 +568,61 @@ def backtest_ai_endpoint(cerere: CerereBacktest):
 
 
 # ----------------------------------------------------------------------------- asistent (etapa finală)
+class CerereChat(BaseModel):
+    mesaj: str
+    istoric: list = []
+
+
+def _sigur(functie, *args):
+    try:
+        return functie(*args)
+    except Exception as e:  # o sursă căzută nu blochează asistentul
+        return {'indisponibil': str(e)[:200]}
+
+
+def instantaneu_platforma():
+    """Ce vede Vega la fiecare întrebare: aceleași date ca panourile, compactate."""
+    p, s, a = _sigur(piata), _sigur(sdca_status), _sigur(ai_status)
+    st = _sigur(stiri_piata)
+    titluri = [{k: x.get(k) for k in ('titlu', 'sursa', 'categorie', 'data') if k in x}
+               for x in (st.get('stiri') or [])[:8]] if isinstance(st, dict) else []
+    tr = {b: (_sigur(bot_tranzactii, b).get('tranzactii') or [])[-10:] for b in ('sdca', 'ai')}
+    if isinstance(a, dict):
+        a.pop('jurnal', None)
+    return {'ora_server': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'piata': p,
+            'bot_sdca': s, 'bot_ai': a, 'procese_boti': _sigur(boti_status),
+            'tranzactii_live': tr, 'stiri_recente': titluri}
+
+
+@app.get("/api/chat")
+def chat_status():
+    return {'activ': asistent_vega.configurat(), 'model': asistent_vega.model()}
+
+
 @app.post("/api/chat")
-def chat():
-    raise HTTPException(status_code=503, detail="Asistentul VEGA nu este încă activat. "
-                                                "Se conectează în etapa finală, cu cheia API Anthropic.")
+def chat(cerere: CerereChat):
+    if not asistent_vega.configurat():
+        raise HTTPException(503, "Vega nu e activ: pune GEMINI_API_KEY în .env și repornește serverul.")
+    if not cerere.mesaj.strip():
+        raise HTTPException(422, "Mesaj gol.")
+    try:
+        text = asistent_vega.raspunde(cerere.mesaj.strip(), cerere.istoric, curat(instantaneu_platforma()))
+    except Exception as e:
+        raise HTTPException(502, str(e))
+    return {'raspuns': text, 'model': asistent_vega.ULTIMUL_MODEL[0] or asistent_vega.model()}
 
 
 # ----------------------------------------------------------------------------- frontend
+@app.middleware("http")
+async def fara_cache_vechi(request, call_next):
+    """Browserul revalidează mereu index.html / app.js / style.css (304 dacă nu s-au schimbat):
+    după o actualizare a interfeței nu mai rămâne cu o versiune veche din cache."""
+    raspuns = await call_next(request)
+    if not request.url.path.startswith('/api/'):
+        raspuns.headers['Cache-Control'] = 'no-cache'
+    return raspuns
+
+
 @app.get("/")
 def index():
     return FileResponse(FRONTEND_DIR / 'index.html')

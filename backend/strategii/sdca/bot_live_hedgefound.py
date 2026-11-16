@@ -20,6 +20,7 @@ warnings.filterwarnings('ignore')
 
 STATE_FILE = SDCA_DIR / 'bot_state.json'
 REPLAY_STATE_FILE = SDCA_DIR / 'bot_state_replay.json'  # replay-ul nu atinge portofoliul real
+JURNAL_LIVE = SDCA_DIR / 'jurnal_live.csv'               # tranzacțiile botului live (nu și ale replay-ului)
 NUME_SCRIPT_DATE = PIPELINE_DIR / 'actualizeaza_date.py'
 
 # Moduri de rulare (din folderul proiectului):
@@ -55,6 +56,20 @@ def actualizeaza_datele_live():
     except Exception as e:
         print(f"[!] Eroare fatală la apelarea scriptului: {e}")
         return False
+
+def noteaza_tranzactie(azi, btc_inainte, cash_inainte, state, mesaje):
+    """Adaugă tranzacția zilei în JURNAL_LIVE (graficul din platformă o marchează pe lumânări)."""
+    dif = state['btc'] - btc_inainte
+    if abs(dif) < 1e-12:
+        return
+    motiv = next((m for m in mesaje if 'BUY' in m or 'SELL' in m), mesaje[0] if mesaje else '')
+    rand = pd.DataFrame([{
+        'Executat_la': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'Zi_semnal': azi['Data'],
+        'Actiune': 'BUY' if dif > 0 else 'SELL', 'Pret': round(float(azi['Close']), 2),
+        'Suma_USD': round(abs(state['cash'] - cash_inainte), 2), 'BTC': round(abs(dif), 8),
+        'BTC_dupa': round(state['btc'], 8), 'Motiv': motiv.strip()}])
+    rand.to_csv(JURNAL_LIVE, mode='a', header=not JURNAL_LIVE.exists(), index=False, encoding='utf-8')
+
 
 def incarca_memoria(cale=STATE_FILE):
     if os.path.exists(cale):
@@ -124,7 +139,9 @@ def rulare_ciclu_analiza(offline=False, capital=None):
               + ("" if offline else " Verifică log-ul de actualizare."))
 
     print("\n🔍 ANALIZĂ ȘI DECIZII:")
+    btc_inainte, cash_inainte = state['btc'], state['cash']
     mesaje = decide(state, azi)
+    noteaza_tranzactie(azi, btc_inainte, cash_inainte, state, mesaje)
     for m in mesaje: print(m)
     if not mesaje:
         print("   ⏳ Status: STANDBY (Nu s-au îndeplinit condițiile de execuție).")

@@ -267,6 +267,7 @@ function afiseazaPret(p) {
   if (p.min != null) $('#min24').textContent = usd(p.min, 0);
   if (p.volum != null) $('#vol24').textContent = compact(p.volum);
   document.title = `${usd(p.pret, 0)} · VEGA`;
+  actualizeazaLumanariLive(p.pret);
 }
 
 function pornesteWS() {
@@ -576,6 +577,12 @@ function construiestePanouriBoti() {
         <button class="btn" data-actiune="ciclu" data-bot="${k}">⟳ UN CICLU ACUM</button>
         <button class="btn pericol" data-actiune="reseteaza" data-bot="${k}">RESETEAZĂ</button>
       </div>
+      <div class="cap-panou lw-cap">
+        <h3>GRAFIC LIVE · TRANZACȚIILE BOTULUI</h3>
+        <div class="segment" id="seg-lw-${k}">${LW_INTERVALE.map(iv => `<button data-iv="${iv}"${iv === '1h' ? ' class="activ"' : ''}>${iv === '1d' ? '1Z' : iv}</button>`).join('')}</div>
+      </div>
+      <div class="lw-wrap" id="lw-${k}"><div class="incarcare">Încarc lumânările Binance</div></div>
+      <p class="nota lw-legenda"><span class="lw-buy">▲ cumpărare</span><span class="lw-sell">▼ vânzare</span>${k === 'sdca' ? '<span class="lw-mediu">- - preț mediu de intrare</span>' : ''}<span>BTCUSDT Binance, live · grafic TradingView Lightweight Charts</span></p>
       <h3>PORTOFOLIU VIRTUAL</h3>
       <div class="tiles" id="tiles-${k}"></div>
       <h3>SEMNAL CURENT</h3>
@@ -587,6 +594,109 @@ function construiestePanouriBoti() {
   $$('#panouri-boti [data-actiune]').forEach(b => b.addEventListener('click', () => actiuneBot(b.dataset.bot, b.dataset.actiune)));
 }
 
+// ----------------------------------------------------------------- grafic live per bot (TradingView Lightweight Charts)
+// Lumânări BTCUSDT de la Binance + marcajele tranzacțiilor din jurnalul botului; ultima lumânare urmează prețul live.
+const LW_SEC = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+const LW_INTERVALE = Object.keys(LW_SEC);
+const LW_OFFSET = -new Date().getTimezoneOffset() * 60;   // Lightweight Charts afișează UTC: mutăm totul în ora locală
+const lw = { sdca: { iv: '1h' }, ai: { iv: '1h' } };
+
+function initGraficeBoti() {
+  if (typeof LightweightCharts === 'undefined') {
+    ['sdca', 'ai'].forEach(k => { $('#lw-' + k).innerHTML = '<div class="t2">Librăria de grafice TradingView nu s-a încărcat (verifică internetul).</div>'; });
+    return;
+  }
+  const css = getComputedStyle(document.documentElement);
+  const cul = (v, rezerva) => css.getPropertyValue(v).trim() || rezerva;
+  ['sdca', 'ai'].forEach(k => {
+    const el = $('#lw-' + k);
+    el.innerHTML = '';
+    const chart = LightweightCharts.createChart(el, {
+      autoSize: true,
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: CUL.text2, fontFamily: getComputedStyle(document.body).fontFamily },
+      grid: { vertLines: { color: 'rgba(255,255,255,.04)' }, horzLines: { color: 'rgba(255,255,255,.05)' } },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,.08)' },
+      timeScale: { borderColor: 'rgba(255,255,255,.08)', timeVisible: true, secondsVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    });
+    const serie = chart.addCandlestickSeries({
+      upColor: cul('--good', '#3ddc84'), downColor: cul('--bad', '#ff5c5c'), borderVisible: false,
+      wickUpColor: cul('--good', '#3ddc84'), wickDownColor: cul('--bad', '#ff5c5c'),
+      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+    });
+    Object.assign(lw[k], { chart, serie, tr: [], liniaMedie: null, ultima: null });
+    $$(`#seg-lw-${k} button`).forEach(b => b.addEventListener('click', () => {
+      lw[k].iv = b.dataset.iv;
+      $$(`#seg-lw-${k} button`).forEach(x => x.classList.toggle('activ', x === b));
+      incarcaLumanari(k);
+    }));
+  });
+}
+
+async function incarcaLumanari(k) {
+  const g = lw[k];
+  if (!g.serie) return;
+  try {
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${g.iv}&limit=1000`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const date = (await r.json()).map(c => ({ time: c[0] / 1000 + LW_OFFSET, open: +c[1], high: +c[2], low: +c[3], close: +c[4] }));
+    g.serie.setData(date);
+    g.ultima = date[date.length - 1];
+    g.prima = date[0]?.time;
+    puneMarcaje(k);
+  } catch (e) { toast('Nu pot descărca lumânările Binance: ' + e.message, true); }
+}
+
+async function incarcaTranzactiiBot(k) {
+  try {
+    const r = await api(`/api/boti/${k}/tranzactii`);
+    lw[k].tr = r.tranzactii || [];
+    lw[k].pretMediu = r.pret_mediu;
+    puneMarcaje(k);
+  } catch (e) {
+    if (!lw[k].avertizat) {   // de obicei: serverul pornit înainte de actualizare nu are încă endpoint-ul
+      lw[k].avertizat = true;
+      toast(`Nu pot citi tranzacțiile botului ${k.toUpperCase()} (${e.message}). Repornește serverul VEGA.`, true);
+    }
+  }
+}
+
+function puneMarcaje(k) {
+  const g = lw[k];
+  if (!g.serie || g.prima == null) return;
+  const pas = LW_SEC[g.iv];
+  const marcaje = g.tr
+    .map(t => ({ ...t, bara: Math.floor((t.t + LW_OFFSET) / pas) * pas }))
+    .filter(t => t.bara >= g.prima)
+    .sort((a, b) => a.bara - b.bara)
+    .map(t => {
+      const buy = t.Actiune === 'BUY';
+      return { time: t.bara, position: buy ? 'belowBar' : 'aboveBar', shape: buy ? 'arrowUp' : 'arrowDown',
+               color: buy ? (getComputedStyle(document.documentElement).getPropertyValue('--good').trim() || '#3ddc84')
+                          : (getComputedStyle(document.documentElement).getPropertyValue('--bad').trim() || '#ff5c5c'),
+               text: `${buy ? 'BUY' : 'SELL'} ${usd(t.Suma_USD, 0)} @ ${usd(t.Pret, 0)}` };
+    });
+  g.serie.setMarkers(marcaje);
+  if (g.liniaMedie) { g.serie.removePriceLine(g.liniaMedie); g.liniaMedie = null; }
+  if (k === 'sdca' && g.pretMediu) {
+    g.liniaMedie = g.serie.createPriceLine({ price: g.pretMediu, color: CUL.sdca, lineWidth: 1, lineStyle: 2,
+                                             axisLabelVisible: true, title: 'preț mediu' });
+  }
+}
+
+function actualizeazaLumanariLive(pret) {   // apelată la fiecare preț nou din WebSocket
+  ['sdca', 'ai'].forEach(k => {
+    const g = lw[k];
+    if (!g.serie || !g.ultima) return;
+    const pas = LW_SEC[g.iv];
+    const bara = Math.floor((Date.now() / 1000 + LW_OFFSET) / pas) * pas;
+    g.ultima = bara > g.ultima.time
+      ? { time: bara, open: g.ultima.close, high: pret, low: pret, close: pret }
+      : { time: g.ultima.time, open: g.ultima.open, high: Math.max(g.ultima.high, pret), low: Math.min(g.ultima.low, pret), close: pret };
+    g.serie.update(g.ultima);
+  });
+}
+
 const tile = (et, v, sub = '', cls = '') => `<div class="tile"><div class="et">${et}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
 
 async function incarcaBoti() {
@@ -594,6 +704,7 @@ async function incarcaBoti() {
     const [s, a, b] = await Promise.all([api('/api/sdca'), api('/api/ai'), api('/api/boti')]);
     stare.date.sdca = s; stare.date.ai = a; stare.boti = b;
     actualizeazaStatusBoti(b);
+    incarcaTranzactiiBot('sdca'); incarcaTranzactiiBot('ai');
 
     const pS = s.portofoliu;
     $('#tiles-sdca').innerHTML = pS
@@ -1086,20 +1197,43 @@ function afiseazaJurnalBt() {
 }
 
 // ----------------------------------------------------------------- consola asistent
+const chatIstoric = [];   // conversația curentă, trimisă lui Vega ca context (se pierde la reîncărcarea paginii)
+
 function adaugaMesaj(text, tip) {
   const el = document.createElement('div');
-  el.className = 'msg ' + tip; el.textContent = text;
+  el.className = 'msg ' + tip;
+  if (tip === 'jarvis') el.innerHTML = esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, '$1<i>$2</i>');
+  else el.textContent = text;
   $('#mesaje').appendChild(el); $('#mesaje').scrollTop = $('#mesaje').scrollHeight;
+  return el;
 }
+
+async function verificaVega() {
+  try {
+    const r = await api('/api/chat');
+    $('#stare-vega').innerHTML = r.activ ? `<i class="led ok"></i>Online · ${esc(r.model)}` : '<i class="led warn"></i>Offline';
+    $('#intrebare').placeholder = r.activ ? 'Întreabă-l pe Vega despre piață sau boți…' : 'Vega e offline (lipsește cheia Gemini)';
+    if (r.activ && !chatIstoric.length) {
+      $('#mesaje').innerHTML = '';
+      adaugaMesaj('Sunt Vega. Văd prețul live, Master_Index-ul, cei doi boți și tranzacțiile lor, plus ultimele știri. Ce vrei să afli?', 'jarvis');
+    }
+  } catch (_) { /* server vechi fără GET /api/chat: rămâne Offline */ }
+}
+
 async function trimiteIntrebare(ev) {
   ev.preventDefault();
   const q = $('#intrebare').value.trim();
   if (!q) return;
   adaugaMesaj(q, 'tu'); $('#intrebare').value = '';
+  const buton = $('#form-chat button'); buton.disabled = true;
+  const scrie = adaugaMesaj('Vega analizează datele…', 'sistem');
   try {
-    const r = await post('/api/chat', { mesaj: q });
+    const r = await post('/api/chat', { mesaj: q, istoric: chatIstoric.slice(-12) });
+    scrie.remove();
     adaugaMesaj(r.raspuns || '', 'jarvis');
-  } catch (e) { adaugaMesaj(e.message, 'sistem'); }
+    chatIstoric.push({ rol: 'tu', text: q }, { rol: 'vega', text: r.raspuns || '' });
+  } catch (e) { scrie.remove(); adaugaMesaj(e.message, 'sistem'); }
+  finally { buton.disabled = false; $('#intrebare').focus(); }
 }
 
 // ----------------------------------------------------------------- actualizare date
@@ -1160,6 +1294,9 @@ document.addEventListener('DOMContentLoaded', () => {
     toast('Librăria de grafice nu s-a încărcat (verifică internetul). Restul platformei funcționează.', true);
   }
   construiestePanouriBoti();
+  initGraficeBoti();
+  incarcaLumanari('sdca'); incarcaLumanari('ai');
+  setInterval(() => { if (stare.pagina === 'boti' && !document.hidden) { incarcaLumanari('sdca'); incarcaLumanari('ai'); } }, 300000);
 
   $$('nav.tabs button').forEach(b => b.addEventListener('click', () => arataPagina(b.dataset.pagina)));
   $$('[data-mergi]').forEach(b => b.addEventListener('click', () => arataPagina(b.dataset.mergi)));
@@ -1204,6 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#form-backtest').addEventListener('submit', ruleazaBacktest);
   $('#bt-strategie').addEventListener('change', e => { $('#bt-start').value = e.target.value === 'sdca' ? '2023-02-15' : '2018-08-17'; });
   $('#form-chat').addEventListener('submit', trimiteIntrebare);
+  verificaVega();
   $('#btn-actualizeaza').addEventListener('click', actualizeazaDate);
 
   reincarcaTot();
